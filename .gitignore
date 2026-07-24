@@ -1,0 +1,40 @@
+# Artefacts de compilation SDCC / SDCC build artefacts
+*.rel
+*.ihx
+*.lk
+*.map
+*.noi
+*.raw
+*.bak
+_tmp_*
+
+# Binaires CPC produits par la compilation / built CPC binaries.
+# Exception : cpc/CTERM2.BIN est versionne (ajoute avec `git add -f`) pour
+# qui n'a pas SDCC. / Exception: cpc/CTERM2.BIN is committed for users
+# without SDCC.
+*.BIN
+*.ROM
+
+# Python
+__pycache__/
+*.pyc
+
+# Configuration locale (contient l'IP de la carte)
+# Local config (holds the board's IP address)
+pc/m4term.json
+
+# Fichiers de travail generes sur la carte / scratch files
+cpc/blob.inc
+cpc/chain.inc
+
+# --- Materiel TIERS : NE PAS republier / THIRD-PARTY: do not redistribute ---
+# Clones de depots de Duke et documentation sous droits d'auteur.
+# On y renvoie par des liens dans le README plutot que de les copier.
+# Clones of Duke's repositories and copyrighted documentation: the README
+# links to them instead of shipping copies.
+m4hardware/
+M4examples/
+cpcxfer/
+m4rom/
+m4ewenterm/
+downloads/

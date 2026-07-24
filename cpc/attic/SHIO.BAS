@@ -1,0 +1,7 @@
+5 |TERM
+10 a$=SPACE$(40)
+20 |TERMIO,@a$
+30 IF a$="" THEN 40
+35 PRINT "[";a$;"]"
+40 FOR i=1 TO 100:NEXT
+50 GOTO 10

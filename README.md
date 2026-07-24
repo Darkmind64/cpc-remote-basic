@@ -1,0 +1,145 @@
+# CPC Remote BASIC — drive an Amstrad CPC from your PC over WiFi
+
+*[Version française](README.fr.md)*
+
+Type BASIC commands in a window on your PC; they run on a real **Amstrad CPC**
+and its screen output comes straight back. The CPC's own keyboard keeps working
+at the same time, and **your BASIC program space stays completely free** — no
+resident BASIC program, no line-number tricks.
+
+```
+PS> python pc/cpcterm.py 192.168.1.139
+Connecte a 192.168.1.139:6128
+
+Terminal actif.
+Ready
+10 print "bonjour"
+20 for n=1 to 3:print n:next
+list
+10 PRINT "bonjour"
+20 FOR n=1 TO 3:PRINT n:NEXT
+Ready
+run
+bonjour
+ 1
+ 2
+ 3
+Ready
+```
+
+Everything runs over WiFi through the **M4 Board**, Duke's WiFi/microSD/ROM
+expansion for the CPC.
+
+## How it works
+
+Two hooks, one RSX, and a Python script:
+
+1. A small Z80 resident (`cpc/cterm2.s`) is loaded at `&8000`, protected by
+   `MEMORY &7FFF`. It opens a TCP server socket on port 6128 through the M4's
+   network API.
+2. It hooks **`TXT OUT ACTION`** (indirection `&BDDA`) to capture every character
+   the CPC prints, into a ring buffer. The hook only buffers — it never talks to
+   the board.
+3. It hooks the BASIC **line editor**, jumpblock entry `EDIT` at **`&BD5E`**.
+   When BASIC asks for a line, the hook either hands over a line received from
+   the PC (carry set — BASIC runs it exactly as if typed), or chains to the
+   original editor so the local keyboard behaves normally.
+4. `pc/cpcterm.py` connects, displays the mirrored screen output, and sends the
+   lines you type. It also offers a local telnet relay (`--telnet`) so you can
+   drive the CPC from PuTTY.
+
+**Why `EDIT` is the right hook.** BASIC lives in the *upper* ROM and cannot call
+the *lower* ROM directly — it must go through the firmware jumpblock. That makes
+`&BD5E` interceptable. By contrast `KM WAIT CHAR` / `KM READ CHAR` are called
+firmware-internally (`&1BBF` → `&1BC5`) and can never be hooked from RAM. This
+single fact is what makes the whole thing possible; finding it took a long hunt
+(see [docs/09](docs/09-nouvelle-architecture.md)).
+
+## Quick start
+
+You need an Amstrad CPC with an [M4 Board](https://github.com/M4Duke/m4hardware)
+on your WiFi, plus [SDCC](https://sdcc.sourceforge.net/) and Python 3 on the PC.
+
+```bash
+cd cpc && ./build_cterm2.cmd          # builds CTERM2.BIN
+python ../pc/m4term.py                # upload it to the SD card: put ../cpc/CTERM2.BIN
+```
+
+On the CPC, a single line:
+
+```basic
+MEMORY &7FFF:LOAD"cterm2.bin":CALL &8000:|TERM
+```
+
+Then on the PC:
+
+```bash
+python pc/cpcterm.py <cpc-ip-address>
+```
+
+Local commands inside `cpcterm.py`: `:aide` for help, `:get prog.bas` … `:fin`
+to capture a `list` into a clean `.bas` file on the PC.
+
+To stop and restore the firmware hooks: `|TERMOFF` on the CPC.
+
+## Repository layout
+
+| Path | Contents |
+|---|---|
+| [`cpc/cterm2.s`](cpc/cterm2.s) | **The resident** — output hook, `EDIT` hook, M4 network I/O, RSX `\|TERM` `\|TERMOFF` `\|TERMIO` |
+| [`pc/cpcterm.py`](pc/cpcterm.py) | **The PC terminal** — console or telnet relay, screen capture to file |
+| [`pc/m4term.py`](pc/m4term.py) | File transfer / control over the M4's HTTP API (`ls`, `put`, `get`, `run`, `rom`, `reset`) |
+| [`cpc/keyscan.s`](cpc/keyscan.s) | Firmware-probing tool built during the hunt (`\|KFIND` `\|KRAW` `\|KDUMP` `\|KPUSH` `\|KFULL`) — memory snapshot/diff, useful for any CPC firmware spelunking |
+| [`cpc/probe.s`](cpc/probe.s) | M4 ROM paging probe (`\|M4VER` `\|PGTEST` `\|PGASYNC`) |
+| [`cpc/tcpecho.s`](cpc/tcpecho.s), [`cpc/tcpterm.s`](cpc/tcpterm.s) | Earlier foreground TCP echo server and bidirectional terminal |
+| [`cpc/cterm.s`](cpc/cterm.s) | First resident (output mirror + keyboard-injection attempts) — superseded, kept as history |
+| [`cpc/attic/`](cpc/attic/) | BASIC shell and diagnostic programs from the intermediate approach, each documented |
+| [`docs/`](docs/) | Detailed technical journal (French) — build notes, firmware findings, dead ends |
+
+## What we learned the hard way
+
+These cost days to find and are documented nowhere else. Full detail in
+[docs/09-nouvelle-architecture.md](docs/09-nouvelle-architecture.md).
+
+- **`RUN"prog.bin"` can never return to BASIC.** The binary is not entered via a
+  `CALL`, so its `ret` pops a bogus address and the machine reboots. Use
+  `LOAD` + `CALL`. This one bug had produced a whole chain of false conclusions.
+- **`KL ROM SELECT` (`&B90F`) is undone by `KL ROM DESELECT` (`&B918`)**, not by
+  `KL ROM RESTORE` (`&B90C`, which reads the state from `A`). Get this wrong and
+  the upper-ROM state is restored at random.
+- **Keep the M4 ROM selected for a whole transaction.** Toggling ROM selection
+  between sending a command and reading its answer corrupts the answer — the
+  board returns spaces. Duke's own `tcp.s` never toggles.
+- **Receive before sending.** The board handles one command at a time; sending
+  output then immediately reading input corrupts the read.
+- **Never poll the M4 at 50 Hz.** A few seconds of tight polling destabilises the
+  firmware. ~10 Hz is stable and plenty responsive.
+- **Injecting keystrokes is impossible on this setup.** The firmware key buffer
+  (`&B65E`, with counters at `&B686`/`&B687`/`&B688`/`&B68A`) stores *key codes*,
+  not ASCII; and reproducing a real keypress byte for byte still never wakes the
+  editor. Hooking `EDIT` sidesteps the problem entirely.
+
+## Credits
+
+- **Duke** ([spinpoint.org](https://www.spinpoint.org/)) — designer of the M4
+  Board. Production ended on 30 September 2025 and all manufacturing files were
+  released: [M4Duke/m4hardware](https://github.com/M4Duke/m4hardware),
+  [m4rom](https://github.com/M4Duke/m4rom),
+  [M4examples](https://github.com/M4Duke/M4examples),
+  [cpcxfer](https://github.com/M4Duke/cpcxfer). His `tcp.s` was the reference
+  that fixed our M4 protocol handling.
+- **Bread80** — [CPCForRC2014](https://github.com/Bread80/CPCForRC2014), a
+  disassembly and adaptation of the CPC 6128 firmware. It gave us the key-buffer
+  layout and, crucially, proof that `KM WAIT CHAR` is called firmware-internally.
+- **Csaba Tóth** — the M4 Extended User Manual (not redistributed here).
+
+Third-party repositories and copyrighted documentation are intentionally **not**
+included in this repository; the links above point to the originals.
+
+## Status and licence
+
+Working and in daily use on a CPC 6128 with M4 firmware v2.0.8. The firmware
+addresses (`&BD5E`, `&B65E`…) are those of the 6128 / BASIC 1.1; a 464 or 664
+would need them re-checked — `cpc/keyscan.s` is exactly the tool for that.
+
+Released under the MIT licence — see [LICENSE](LICENSE).

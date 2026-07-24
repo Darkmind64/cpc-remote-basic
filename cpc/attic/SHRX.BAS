@@ -1,0 +1,5 @@
+5 |TERM
+10 a$=SPACE$(40)
+20 CALL &BD19:|TERMRX,@a$
+30 IF a$<>"" THEN PRINT "[";a$;"]"
+40 GOTO 10
