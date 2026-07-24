@@ -110,6 +110,23 @@ python pc/cpcterm.py <cpc-ip-address>
 Local commands inside `cpcterm.py`: `:aide` for help, `:get prog.bas` … `:fin`
 to capture a `list` into a clean `.bas` file on the PC.
 
+### Character set
+
+The CPC is not Latin-1, and the French model follows ISO-646-FR: the accented
+letters take the place of `@ \ { | }`. Verified on the machine — `ASC("é")` = 123,
+and the screen does show `à ç é ù è` at those codes. The other ISO-646-FR
+positions (`# [ ] ` ~`) are **not** substituted.
+
+`cpcterm.py` translates both ways: your accented input becomes the right CPC
+codes, and the CPC's output comes back faithfully — including the Greek letters
+(176-191) and the block graphics (128-143). An unmapped CPC symbol shows as
+`<NN>` rather than being displayed wrongly, and a character the CPC does not have
+(`€`, `œ`) is reported instead of being silently dropped.
+
+Worth knowing: `|` and `ù` are **the same character** on the CPC (code 124), as
+are `@` and `à` (code 64). So a `LIST` containing an RSX call comes back as
+`ùTERM` — exactly what the CPC screen shows.
+
 To stop and restore the firmware hooks: `|TERMOFF` on the CPC.
 
 ## Repository layout

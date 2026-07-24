@@ -112,6 +112,23 @@ python pc/cpcterm.py <ip-du-cpc>
 Commandes locales de `cpcterm.py` : `:aide` pour l'aide, `:get prog.bas` … `:fin`
 pour capturer un `list` dans un fichier `.bas` propre côté PC.
 
+### Jeu de caractères
+
+Le CPC n'est pas en Latin-1, et le modèle français suit l'ISO-646-FR : les
+accentuées prennent la place de `@ \ { | }`. Vérifié sur la machine —
+`ASC("é")` = 123, et l'écran affiche bien `à ç é ù è` à ces codes. Les autres
+positions ISO-646-FR (`# [ ] ` ~`) ne sont **pas** substituées.
+
+`cpcterm.py` traduit dans les deux sens : tes accentuées deviennent les bons
+codes CPC, et l'affichage du CPC remonte fidèlement — y compris les lettres
+grecques (176-191) et les blocs semi-graphiques (128-143). Un symbole CPC non
+cartographié apparaît en `<NN>` plutôt que d'être affiché faux, et un caractère
+absent du CPC (`€`, `œ`) est signalé au lieu d'être perdu en silence.
+
+Conséquence à connaître : `|` et `ù` sont **le même caractère** sur le CPC
+(code 124), tout comme `@` et `à` (code 64). Un `LIST` contenant un appel RSX
+remonte donc avec `ùTERM` — exactement ce qu'affiche l'écran du CPC.
+
 Pour arrêter et rendre ses hooks au firmware : `|TERMOFF` sur le CPC.
 
 ## Organisation du dépôt

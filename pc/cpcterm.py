@@ -33,31 +33,84 @@ KEY_DELAY = 0.02
 MAX_LINE = 100          # ne pas depasser le tampon de ligne du CPC
 
 
+# ==================================================================
+# Jeu de caracteres du CPC (version FRANCAISE) <-> Unicode
+#
+# Le CPC n'est pas en Latin-1. Deux ecarts, verifies sur la machine :
+#
+# 1. ASCII : le generateur de caracteres francais suit l'ISO-646-FR et
+#    remplace @ \ { | } par a-grave, c-cedille, e-aigu, u-grave,
+#    e-grave. Confirme par ASC("e-aigu") = 123, etc., et a l'ecran.
+#    Consequence amusante : la barre des RSX (code 124) s'affiche « u »
+#    accentue — d'ou le « uTERM » qu'on lit sur l'ecran du CPC.
+#
+# 2. Au-dela de 127, le CPC affiche ses propres symboles (blocs
+#    semi-graphiques, lettres grecques, fleches) qui n'ont rien a voir
+#    avec Latin-1.
+#
+# On traduit donc explicitement, dans les deux sens.
+# ==================================================================
+CPC_TO_UNI = {
+    # --- substitutions ISO-646-FR (verifiees sur la machine) --------
+    # Seules ces cinq positions sont substituees. Verifie a l'ecran :
+    # 35, 91, 93, 96 et 126 affichent bien # [ ] ` ~ et NON les
+    # £ ° § ¨ de l'ISO-646-FR complet. La table ASCII est donc close.
+    0x40: "à", 0x5C: "ç", 0x7B: "é", 0x7C: "ù", 0x7D: "è",
+
+    # --- symboles (releves sur la table imprimee par le CPC) --------
+    0xA3: "£", 0xAB: "±", 0xAC: "÷", 0xAF: "¡",
+
+    # --- lettres grecques (176-191) ---------------------------------
+    0xB0: "α", 0xB1: "β", 0xB2: "γ", 0xB3: "δ", 0xB4: "ε", 0xB5: "θ",
+    0xB6: "λ", 0xB7: "μ", 0xB8: "π", 0xB9: "σ", 0xBA: "φ", 0xBB: "ψ",
+    0xBC: "χ", 0xBD: "ω", 0xBE: "Σ", 0xBF: "Ω",
+
+    # --- blocs semi-graphiques (128-143) : equivalents Unicode ------
+    0x80: "▘", 0x81: "▝", 0x82: "▀", 0x83: "▖", 0x84: "▌", 0x85: "▞",
+    0x86: "▛", 0x87: "▗", 0x88: "▚", 0x89: "▐", 0x8A: "▜", 0x8B: "▄",
+    0x8C: "▙", 0x8D: "▟", 0x8E: "█", 0x8F: "░",
+    0x7F: "▒",
+}
+UNI_TO_CPC = {v: k for k, v in CPC_TO_UNI.items()}
+
+
 def cpc_to_text(data):
-    """Rend lisible le flux CPC : CR seul -> saut de ligne, codes de
-    controle ecartes sauf CR/LF/TAB."""
+    """Flux CPC -> texte lisible.
+
+    CR seul -> saut de ligne. Les codes de controle (< 32) sont ecartes
+    sauf CR/LF/TAB. Au-dela de 127, on traduit via la table ; ce qui n'y
+    figure pas est rendu par <NN> plutot que d'etre affiche faux ou
+    perdu en silence.
+    """
     out = []
     for b in data:
         if b in (10, 13, 9):
             out.append(chr(b))
+        elif b in CPC_TO_UNI:
+            out.append(CPC_TO_UNI[b])
         elif 32 <= b < 127:
             out.append(chr(b))
         elif b >= 128:
-            out.append(chr(b))       # jeu de caracteres CPC : on laisse passer
+            out.append("<%02X>" % b)     # symbole CPC non cartographie
         # les autres (codes de controle et leurs parametres) sont ignores
     return "".join(out).replace("\r\n", "\n").replace("\r", "\n")
 
 
 def to_cpc(ch):
-    """Traduit une frappe PC en code CPC."""
+    """Traduit une frappe PC en code CPC. Rend b"" si le caractere
+    n'existe pas sur le CPC (l'appelant le signale)."""
     if ch == "\n" or ch == "\r":
         return b"\r"                 # ENTER
     if ch == "\x7f" or ch == "\b":
         return b"\x7f"               # DEL
     if ch == "\x1b":
         return b"\xfc"               # ESC (code CPC)
-    b = ch.encode("latin-1", "ignore")
-    return b if len(b) == 1 else b""
+    if ch in UNI_TO_CPC:             # accentuees et symboles CPC
+        return bytes([UNI_TO_CPC[ch]])
+    o = ord(ch)
+    if 32 <= o < 127:                # ASCII simple
+        return bytes([o])
+    return b""                       # inconnu du CPC
 
 
 class Link:
@@ -175,8 +228,11 @@ def run_console(host, port):
                       else "[aucun enregistrement en cours]\n")
                 continue
 
-            out = b"".join(to_cpc(c) for c in line)
-            link.send_key(out)
+            pieces = [(c, to_cpc(c)) for c in line]
+            lost = sorted({c for c, b in pieces if not b and c not in "\r\n"})
+            if lost:
+                write("[ignore, absent du CPC : %s]\n" % " ".join(lost))
+            link.send_key(b"".join(b for _, b in pieces))
     except KeyboardInterrupt:
         pass
     finally:
