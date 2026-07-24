@@ -1,23 +1,20 @@
-> ## ⚠️ CE DOCUMENT EST EN GRANDE PARTIE INVALIDÉ (22/07/2026)
+> ## ⚠️ DOCUMENT INVALIDÉ — NE PAS S'EN SERVIR COMME RÉFÉRENCE
 >
-> La cause racine de presque tous les « pièges » ci-dessous a été trouvée :
-> **`RUN"prog.BIN"` ne rend pas la main** — le binaire n'est pas appelé par un
-> `CALL`, donc son `ret` dépile une adresse invalide et la machine redémarre.
-> Vérifié avec un programme de 16 octets qui affiche `A` puis fait `ret` :
-> reboot avec `RUN`, retour normal au `Ready` avec `LOAD` + `CALL`.
+> **Quatre de ses affirmations ont été démenties par la mesure.** Ce document a
+> coûté plus de temps qu'il n'en a fait gagner : chaque « piège » qu'il énonçait
+> a envoyé le projet dans une mauvaise direction. Il est conservé uniquement
+> comme historique. **La référence est [docs/09](09-nouvelle-architecture.md).**
 >
-> Conséquences : le §3.1 (« le `RUN` reprend la mémoire ») est **faux** — la RAM
-> n'a jamais été reprise ; l'échec du résident RAM (&4000 comme &9E00), le détour
-> par la ROM et une partie de l'impasse 3c reposent tous sur ce seul bug.
+> | Affirmation de ce document | Réalité mesurée |
+> |---|---|
+> | §3.1 « le `RUN` reprend la mémoire au retour » | **Faux.** `RUN"prog.BIN"` ne *peut pas* rendre la main : le binaire n'est pas entré par un `CALL`, son `ret` dépile une adresse invalide et la machine redémarre. Vérifié avec 16 octets qui affichent `A` puis font `ret` : reboot avec `RUN`, `Ready` normal avec `LOAD` + `CALL`. La RAM n'a jamais été reprise. |
+> | §3.7 bis « on ne peut pas paginer la ROM M4 en tâche de fond » | **Faux.** Le code restaurait l'état de la ROM haute avec `KL ROM RESTORE` (&B90C, qui lit **A**) en lui passant **BC**. Le bon appariement est `KL ROM SELECT` (&B90F) ↔ **`KL ROM DESELECT` (&B918)**. Avec lui : 20000 paginations d'affilée, interruptions actives, écran laissé en &C000, affichage intact. |
+> | §3.2 « la réservation mémoire par l'init ROM n'est pas honorée » | **Faux.** L'init reçoit `HL` = sommet de la mémoire libre et le rend abaissé, carry armé. En rendant `&7FFF` on obtient `HIMEM = &7F7B`. `cpc/termrom2.s` s'en sert : &8000 est protégé dès le boot, sans taper `MEMORY`. |
+> | §3.5 « une init de ROM doit être silencieuse » | **Vrai seulement dans son cas.** Cette ROM-là posait un hook d'affichage dans son init et se déclenchait donc elle-même. Une init qui ne pose pas de hook peut afficher — la ROM M4 le fait (« M4 Board v2.0.8 »), et `cpc/termrom2.s` aussi. |
 >
-> Second bug établi par lecture du code : [tcpres.s:36](../cpc/tcpres.s:36) restaure
-> l'état de la ROM haute avec `KL ROM RESTORE` (&B90C, qui lit **A**) en lui
-> passant **BC**. Le bon appariement est `KL ROM SELECT` (&B90F, rend B=état,
-> C=ROM) ↔ **`KL ROM DESELECT` (&B918)**. C'est très probablement l'origine du
-> §3.7 bis (« écran en pointillés, irrattrapable »).
->
-> Reprendre à partir de `docs/09-nouvelle-architecture.md`. Ce qui suit est
-> conservé comme historique — ne pas s'en servir comme référence.
+> Restent valables : §3.3 (jumpblock `RST 1` ≠ indirection `JP`), §3.4 (ne jamais
+> modifier le caractère dans un hook d'affichage), §3.6 (restaurer la ROM
+> sélectionnée) et §3.7 (la M4 n'est pas réentrante).
 
 # Terminal distant CPC ↔ PC — architecture et pièges
 

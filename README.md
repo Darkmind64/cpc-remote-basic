@@ -32,7 +32,7 @@ expansion for the CPC.
 
 ## How it works
 
-Two hooks, one RSX, and a Python script:
+Two firmware hooks, a couple of RSXs, and a Python script:
 
 1. A small Z80 resident (`cpc/cterm2.s`) runs at `&8000`. It is carried inside a
    background ROM (`cpc/termrom2.s`) whose init reserves the RAM above `&8000` at
@@ -139,9 +139,9 @@ To stop and restore the firmware hooks: `|TERMOFF` on the CPC.
 | [`pc/m4term.py`](pc/m4term.py) | File transfer / control over the M4's HTTP API (`ls`, `put`, `get`, `run`, `rom`, `reset`) |
 | [`cpc/keyscan.s`](cpc/keyscan.s) | Firmware-probing tool built during the hunt (`\|KFIND` `\|KRAW` `\|KDUMP` `\|KPUSH` `\|KFULL`) — memory snapshot/diff, useful for any CPC firmware spelunking |
 | [`cpc/probe.s`](cpc/probe.s) | M4 ROM paging probe (`\|M4VER` `\|PGTEST` `\|PGASYNC`) |
-| [`cpc/tcpecho.s`](cpc/tcpecho.s), [`cpc/tcpterm.s`](cpc/tcpterm.s) | Earlier foreground TCP echo server and bidirectional terminal |
+| [`cpc/tcpecho.s`](cpc/tcpecho.s), [`cpc/tcpmirror.s`](cpc/tcpmirror.s), [`cpc/tcpterm.s`](cpc/tcpterm.s) | Earlier steps, still working: TCP echo server, screen mirror, foreground bidirectional terminal. PC clients: `pc/echotest.py`, `pc/mirror_view.py`, `pc/chat.py` |
 | [`cpc/cterm.s`](cpc/cterm.s) | First resident (output mirror + keyboard-injection attempts) — superseded, kept as history |
-| [`cpc/attic/`](cpc/attic/) | BASIC shell and diagnostic programs from the intermediate approach, each documented |
+| [`cpc/attic/`](cpc/attic/), [`pc/attic/`](pc/attic/) | BASIC shell, diagnostic programs and superseded PC clients from the intermediate approach, each documented |
 | [`docs/`](docs/) | Detailed technical journal (French) — build notes, firmware findings, dead ends |
 
 ## What we learned the hard way

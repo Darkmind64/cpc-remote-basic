@@ -30,6 +30,7 @@
 		.area	_HEADER (ABS)
 		.org	0xC000
 
+TXT_OUTPUT	.equ	0xBB5A
 CORE		.equ	0x8000		; adresse de recopie du coeur
 CORE_TERM	.equ	CORE+3		; table de sauts de cterm2.s
 CORE_TERMOFF	.equ	CORE+6
@@ -54,16 +55,44 @@ name_table:	.ascis	"CPCTERM"		; nom de la ROM (RSX 0 = init)
 		.db	0
 
 ; ==================================================================
-; Initialisation : reserver la RAM au-dessus de &8000.
-; DOIT ETRE SILENCIEUSE — afficher quoi que ce soit ici provoque une
-; boucle de reboot (docs/08 §3.5).
+; Initialisation : reserver la RAM au-dessus de &8000, puis annoncer
+; la ROM.
+;
+; Le §3.5 de docs/08 (« une init ROM doit etre silencieuse ») ne valait
+; que pour une ROM qui posait un hook d'affichage dans son init et se
+; declenchait donc elle-meme. Celle-ci ne pose aucun hook : elle peut
+; parler, exactement comme la ROM M4 qui affiche « M4 Board v2.0.8 ».
+;
+; HL (nouveau sommet) et DE (bas) doivent etre rendus intacts a
+; l'appelant : on les preserve autour de l'affichage.
 ; ==================================================================
 init:		ld	a,h			; sommet deja sous &8000 ?
 		cp	#0x80
 		jr	c, init_ok		; oui : ne pas le remonter
 		ld	hl,#0x7FFF		; sinon reserver &8000 et au-dessus
-init_ok:	scf				; carry = ROM acceptee
+init_ok:	push	hl
+		push	de
+		ld	hl,#msg_banner
+		call	printz
+		pop	de
+		pop	hl
+		scf				; carry = ROM acceptee
 		ret
+
+; --- affichage d'une chaine terminee par 0 -------------------------
+printz:		ld	a,(hl)
+		or	a
+		ret	z
+		push	hl
+		call	TXT_OUTPUT
+		pop	hl
+		inc	hl
+		jr	printz
+
+msg_banner:	.ascii	" ROM Terminal "
+		.db	164			; © dans le jeu du CPC
+		.ascii	"Davy EPRINCHARD"
+		.db	13,10,0
 
 ; ==================================================================
 ; |TERM / |TERMOFF : s'assurer que le coeur est en RAM, puis sauter

@@ -32,7 +32,7 @@ CPC conçue par Duke.
 
 ## Principe
 
-Deux détournements, une RSX et un script Python :
+Deux détournements du firmware, quelques RSX et un script Python :
 
 1. Un petit résident Z80 (`cpc/cterm2.s`) s'exécute en `&8000`. Il est embarqué
    dans une ROM de fond (`cpc/termrom2.s`) dont l'init réserve la RAM au-dessus de
@@ -141,9 +141,9 @@ Pour arrêter et rendre ses hooks au firmware : `|TERMOFF` sur le CPC.
 | [`pc/m4term.py`](pc/m4term.py) | Transfert et pilotage via l'API HTTP de la M4 (`ls`, `put`, `get`, `run`, `rom`, `reset`) |
 | [`cpc/keyscan.s`](cpc/keyscan.s) | Outil de sondage du firmware né de la traque (`\|KFIND` `\|KRAW` `\|KDUMP` `\|KPUSH` `\|KFULL`) — photo/comparaison mémoire, utile pour toute exploration de firmware CPC |
 | [`cpc/probe.s`](cpc/probe.s) | Sonde de pagination de la ROM M4 (`\|M4VER` `\|PGTEST` `\|PGASYNC`) |
-| [`cpc/tcpecho.s`](cpc/tcpecho.s), [`cpc/tcpterm.s`](cpc/tcpterm.s) | Serveur d'écho TCP et terminal bidirectionnel, en premier plan (étapes antérieures) |
+| [`cpc/tcpecho.s`](cpc/tcpecho.s), [`cpc/tcpmirror.s`](cpc/tcpmirror.s), [`cpc/tcpterm.s`](cpc/tcpterm.s) | Étapes antérieures, toujours fonctionnelles : écho TCP, miroir d'écran, terminal bidirectionnel en premier plan. Clients PC : `pc/echotest.py`, `pc/mirror_view.py`, `pc/chat.py` |
 | [`cpc/cterm.s`](cpc/cterm.s) | Premier résident (miroir de sortie + tentatives d'injection clavier) — remplacé, conservé comme historique |
-| [`cpc/attic/`](cpc/attic/) | Shell BASIC et programmes de diagnostic de l'approche intermédiaire, chacun documenté |
+| [`cpc/attic/`](cpc/attic/), [`pc/attic/`](pc/attic/) | Shell BASIC, programmes de diagnostic et clients PC remplacés, chacun documenté |
 | [`docs/`](docs/) | Journal technique détaillé — fabrication, découvertes firmware, impasses |
 
 ## Ce qu'on a appris à la dure
