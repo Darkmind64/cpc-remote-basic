@@ -34,9 +34,10 @@ CPC conçue par Duke.
 
 Deux détournements, une RSX et un script Python :
 
-1. Un petit résident Z80 (`cpc/cterm2.s`) est chargé en `&8000`, protégé par
-   `MEMORY &7FFF`. Il ouvre une socket TCP serveur sur le port 6128 via l'API
-   réseau de la M4.
+1. Un petit résident Z80 (`cpc/cterm2.s`) s'exécute en `&8000`. Il est embarqué
+   dans une ROM de fond (`cpc/termrom2.s`) dont l'init réserve la RAM au-dessus de
+   `&8000` dès le boot — ou chargé à la main par `MEMORY &7FFF` + `LOAD` + `CALL`.
+   Il ouvre une socket TCP serveur sur le port 6128 via l'API réseau de la M4.
 2. Il détourne **`TXT OUT ACTION`** (indirection `&BDDA`) pour capturer chaque
    caractère affiché par le CPC dans un tampon circulaire. Ce hook ne fait
    qu'empiler — il ne parle jamais à la carte.
@@ -62,18 +63,47 @@ possible ; le trouver a demandé une longue traque (voir
 Il faut un Amstrad CPC équipé d'une [M4 Board](https://github.com/M4Duke/m4hardware)
 sur ton WiFi, plus [SDCC](https://sdcc.sourceforge.net/) et Python 3 sur le PC.
 
+### Recommandé : l'installer en ROM
+
+Le terminal réside alors dans un slot ROM de la M4 : rien à charger, rien à taper
+au démarrage. Compile-la et envoie-la depuis `pc/m4term.py` :
+
 ```bash
-cd cpc && ./build_cterm2.cmd          # produit CTERM2.BIN
-python ../pc/m4term.py                # envoi sur la SD : put ../cpc/CTERM2.BIN
+cd cpc && ./build_termrom2.cmd        # produit TERM2.ROM
+```
+```
+put ../cpc/TERM2.ROM
+rom ../cpc/TERM2.ROM 3 TERM
+resetm4
 ```
 
-Sur le CPC, une seule ligne :
+Ensuite, le jour où tu veux le terminal, il suffit de taper sur le CPC :
 
+```basic
+|TERM
+```
+
+L'init de la ROM réserve la mémoire au-dessus de `&8000` dès le boot (`HIMEM`
+tombe à `&7F7B`), donc aucun `MEMORY` n'est jamais nécessaire. `|TERMOFF` arrête
+le terminal et rend ses hooks au firmware. Pour retirer la ROM : `delrom 3` puis
+`resetm4` — ça fonctionne par WiFi même CPC planté, et c'est précisément pourquoi
+on utilise un slot séparé plutôt que de modifier la ROM M4.
+
+### Variante : la charger comme binaire
+
+Si tu préfères ne pas occuper un slot ROM :
+
+```bash
+cd cpc && ./build_cterm2.cmd          # produit CTERM2.BIN
+```
+```
+put ../cpc/CTERM2.BIN
+```
 ```basic
 MEMORY &7FFF:LOAD"cterm2.bin":CALL &8000:|TERM
 ```
 
-Puis sur le PC :
+### Puis, sur le PC
 
 ```bash
 python pc/cpcterm.py <ip-du-cpc>
@@ -88,6 +118,7 @@ Pour arrêter et rendre ses hooks au firmware : `|TERMOFF` sur le CPC.
 
 | Chemin | Contenu |
 |---|---|
+| [`cpc/termrom2.s`](cpc/termrom2.s) | **La ROM** — ROM de fond qui embarque le cœur et expose `\|TERM` / `\|TERMOFF` dès le boot ; son init réserve la RAM au-dessus de `&8000` |
 | [`cpc/cterm2.s`](cpc/cterm2.s) | **Le résident** — hook d'affichage, hook `EDIT`, I/O réseau M4, RSX `\|TERM` `\|TERMOFF` `\|TERMIO` |
 | [`pc/cpcterm.py`](pc/cpcterm.py) | **Le terminal PC** — console ou relais telnet, capture d'écran vers fichier |
 | [`pc/m4term.py`](pc/m4term.py) | Transfert et pilotage via l'API HTTP de la M4 (`ls`, `put`, `get`, `run`, `rom`, `reset`) |

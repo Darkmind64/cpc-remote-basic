@@ -58,6 +58,24 @@ RXMAXL		.equ	0x80		; 128 octets
 CHUNK		.equ	180		; octets max par C_NETSEND
 
 ; ==================================================================
+; Table de sauts a adresses FIXES — permet a une ROM de fond
+; (cpc/termrom2.s) de recopier ce coeur en &8000 et d'appeler ses
+; points d'entree sans connaitre la disposition interne.
+;   &8000 : installation des RSX (usage LOAD + CALL &8000)
+;   &8003 : demarrer le terminal   (= |TERM)
+;   &8006 : arreter le terminal    (= |TERMOFF)
+;   &8009 : remise a zero de l'etat (apres une recopie depuis la ROM)
+; ==================================================================
+		jp	start
+		jp	rsx_term
+		jp	rsx_termoff
+		jp	core_reset
+
+core_reset:	xor	a
+		ld	(active),a
+		ret
+
+; ==================================================================
 ; CALL &8000 : installer les RSX, rendre la main
 ; ==================================================================
 start:		push	ix

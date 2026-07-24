@@ -176,6 +176,61 @@ Déploiement :
 difficulté était donc dans l'enchaînement des commandes M4 (pièges 2-5), pas dans
 la lecture elle-même. Sans ce dump, on cherchait au mauvais endroit.
 
+## 7. Étape C — le terminal en ROM (VALIDÉ 24/07/2026)
+
+`cpc/termrom2.s` embarque le résident dans une **ROM de fond** installée dans un
+slot M4. Le CPC démarre avec `|TERM` et `|TERMOFF` disponibles : plus rien à
+charger, plus de `MEMORY` à taper.
+
+```
+(m4term)  put ../cpc/TERM2.ROM : rom ../cpc/TERM2.ROM 3 TERM : resetm4
+(CPC)     |TERM
+```
+
+Construction : `build_termrom2.cmd` compile le cœur (ORG &8000), l'embarque en
+données via `bin2inc.py`, assemble la ROM et la complète à 16 Ko (`padrom.py`).
+
+### Deux découvertes
+
+**1. La réservation mémoire par l'init ROM EST honorée** — le §3.2 de `docs/08`
+était une conclusion erronée de plus. Convention relevée dans la ROM M4 officielle
+(`m4rom/M4ROM.s`, `init_rom`) :
+
+```
+Entrée : HL = sommet de la mémoire libre, DE = bas
+Sortie : carry armé = ROM acceptée, HL = nouveau sommet (abaissé)
+```
+
+Notre init rend `HL = &7FFF`. Mesuré sur la machine : `HIMEM = &7F7B` — notre
+réservation, puis 132 octets réclamés en dessous par la ROM M4. **&8000 et
+au-dessus sont donc protégés dès le boot, sans rien taper.** L'init doit rester
+rigoureusement silencieuse (§3.5 de `docs/08` : afficher quoi que ce soit
+provoque une boucle de reboot).
+
+**2. Le premier nom de la table est le nom de la ROM**, pas une RSX. Les noms de
+RSX ne viennent qu'ensuite :
+
+```asm
+name_table:  .ascis "CPCTERM"   ; nom de la ROM (RSX 0 = init)
+             .ascis "TERM"      ; RSX 1 -> &C009
+             .ascis "TERMOFF"   ; RSX 2 -> &C00C
+```
+
+C'est la convention de la ROM M4 elle-même (`"M4 BOARD"`, puis `"SD"`, `"DISC"`…)
+— celle sur laquelle s'appuie notre `find_m4_rom`. L'oublier décale toute la
+table : `|TERM` appelait l'init, qui rend la main sans rien afficher. Symptôme :
+un `Ready` muet et une socket jamais ouverte.
+
+### Pourquoi le cœur est recopié en RAM et non exécuté depuis la ROM
+
+Le cœur pagine la ROM M4 (`sel_m4`) pour dialoguer avec la carte. Du code vivant
+en &C000-&FFFF **se dépaginerait lui-même**. Le cœur est donc embarqué en données
+et recopié en &8000 par `|TERM` — assemblé pour cette adresse, aucune relocation
+n'est nécessaire. Une table de sauts à adresses fixes en tête de `cterm2.s`
+(&8000 install, &8003 `|TERM`, &8006 `|TERMOFF`, &8009 remise à zéro) donne à la
+ROM des points d'entrée stables. Un second `|TERM` ne réécrase pas une session en
+cours : la ROM reconnaît un cœur déjà en place à sa table de sauts.
+
 ### Ancienne étape A (historique)
 
 `cpc/cterm.s` (sortie seule + tentatives d'injection clavier) est conservé comme
