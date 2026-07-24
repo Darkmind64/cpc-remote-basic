@@ -38,3 +38,6 @@ cpcxfer/
 m4rom/
 m4ewenterm/
 downloads/
+
+# Genere par bin2inc.py a chaque build / generated on every build
+cpc/cterm2_blob.inc
