@@ -2,23 +2,30 @@
 # -*- coding: utf-8 -*-
 """cpcterm — piloter le BASIC du CPC depuis Windows.
 
-Cote CPC : le resident `cpc/cterm2.s` + le shell BASIC `TERM.BAS`. Le CPC
-est SERVEUR sur le port 6128. On lui envoie une LIGNE de commande BASIC
-terminee par CR ; le shell la recupere (RSX |TERMIO), l'ecrit dans
-cmd.bas et l'execute par CHAIN MERGE. Toute la sortie ecran du CPC
-remonte ici.
+Cote CPC : le resident `cpc/cterm2.s`, livre en ROM (`cpc/termrom2.s`).
+Il detourne l'editeur de ligne du BASIC (entree EDIT du jumpblock,
+&BD5E) : la ligne qu'on envoie est deposee dans le tampon du BASIC, qui
+l'execute comme une frappe. Aucun programme BASIC n'est necessaire —
+l'espace programme reste entierement a l'utilisateur.
 
-    (CPC)  MEMORY &7FFF : RUN"term.bas"      <- tout-en-un
+Le CPC est SERVEUR sur le port 6128 ; on lui envoie une ligne terminee
+par CR, et toute sa sortie ecran remonte ici.
+
+    (CPC)  |TERM                                     (ROM installee)
     (PC)   python cpcterm.py <ip-du-cpc>             console directe
            python cpcterm.py <ip-du-cpc> --telnet    relais telnet (2323)
+           python cpcterm.py <ip-du-cpc> --width 80  si le CPC est en MODE 2
+           python cpcterm.py <ip-du-cpc> --dump      relever l'ecran actuel
+
+Commandes locales : `:aide`, `:get fichier.bas` … `:fin` pour capturer
+un `list` dans un fichier propre.
 
 En mode telnet, se connecter avec PuTTY (Raw ou Telnet) sur
-127.0.0.1:2323. Le shell CPC ne renvoie pas d'echo des touches : laisser
-le client faire son echo local (on ne negocie donc PAS WILL ECHO).
+127.0.0.1:2323. Le CPC ne renvoie pas d'echo des touches : laisser le
+client faire son echo local (on ne negocie donc PAS WILL ECHO).
 
-NOTE : l'injection clavier PC->CPC s'est revelee impossible sur cette
-carte (voir docs/09 §6) ; c'est pourquoi on pilote un shell BASIC ligne
-par ligne plutot que de simuler des frappes.
+NOTE : l'injection de frappes PC->CPC s'est revelee impossible sur cette
+carte (voir docs/09 §6) ; d'ou le detournement de l'editeur de ligne.
 """
 import argparse
 import socket
@@ -75,26 +82,244 @@ CPC_TO_UNI = {
 UNI_TO_CPC = {v: k for k, v in CPC_TO_UNI.items()}
 
 
-def cpc_to_text(data):
-    """Flux CPC -> texte lisible.
+# Nombre de parametres de chaque code de controle CPC (0-31). Sans
+# cette table, les parametres d'un code de controle (couleurs, fenetre,
+# positionnement) ressortaient en charabia dans le texte.
+CTRL_PARAMS = {
+    0: 0, 1: 1, 2: 0, 3: 0, 4: 1, 5: 1, 6: 0, 7: 0,
+    8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 1, 15: 1,
+    16: 0, 17: 0, 18: 0, 19: 0, 20: 0, 21: 0, 22: 1, 23: 1,
+    24: 0, 25: 9, 26: 4, 27: 0, 28: 3, 29: 2, 30: 0, 31: 2,
+}
+# Marqueurs emis par le resident (prefixe ESC). Necessaires parce que
+# les commandes MODE / PEN / PAPER / INK du BASIC appellent le firmware
+# directement : elles n'emettent RIEN dans le flux d'affichage, donc le
+# PC ne peut pas les deviner en ecoutant les caracteres.
+MODE_MARK = 0x4D            # ESC 'M' <chiffre>          -> MODE
+COL_MARK = 0x43             # ESC 'C' <18 octets>        -> couleurs
+CLS_MARK = 0x4C             # ESC 'L'                    -> effacement
+FONT_MARK = 0x46            # ESC 'F' <2048 octets>      -> jeu de caracteres
+FONT_LEN = 2048             # 256 caracteres x 8 octets
 
-    CR seul -> saut de ligne. Les codes de controle (< 32) sont ecartes
-    sauf CR/LF/TAB. Au-dela de 127, on traduit via la table ; ce qui n'y
-    figure pas est rendu par <NN> plutot que d'etre affiche faux ou
-    perdu en silence.
+# Commandes hors-bande envoyees AU CPC : prefixe &01, puis une lettre.
+# Le resident les intercepte au lieu de les passer au BASIC.
+CMD_DUMP = b"\x01D"    # relever le contenu actuel de l'ecran
+CMD_FONT = b"\x01F"    # envoyer le jeu de caracteres (2 Ko)
+CMD_ECHO = b"\x01E"    # renvoyer l'echo des frappes
+# Ces prefixes s'ecrivent \x01 et non en octet brut : un octet de
+# controle pose directement dans le source est invisible a la relecture.
+COL_LEN = 18                # encre, papier, 16 couleurs de palette
+ESC_LEN = {MODE_MARK: 1, COL_MARK: COL_LEN, CLS_MARK: 0,
+           FONT_MARK: FONT_LEN}
+
+# Les 27 couleurs du CPC, en RVB. Chaque composante vaut 0, 128 ou 255.
+CPC_RGB = [
+    (0, 0, 0), (0, 0, 128), (0, 0, 255), (128, 0, 0),
+    (128, 0, 128), (128, 0, 255), (255, 0, 0), (255, 0, 128),
+    (255, 0, 255), (0, 128, 0), (0, 128, 128), (0, 128, 255),
+    (128, 128, 0), (128, 128, 128), (128, 128, 255), (255, 128, 0),
+    (255, 128, 128), (255, 128, 255), (0, 255, 0), (0, 255, 128),
+    (0, 255, 255), (128, 255, 0), (128, 255, 128), (128, 255, 255),
+    (255, 255, 0), (255, 255, 128), (255, 255, 255),
+]
+# Palette par defaut du CPC : encre 0 = bleu, encre 1 = jaune vif.
+DEFAULT_INKS = [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 1, 16]
+MODE_WIDTH = {0: 20, 1: 40, 2: 80}
+
+
+def cpc_char(b):
+    """Un octet CPC affichable -> caractere Unicode."""
+    if b in CPC_TO_UNI:
+        return CPC_TO_UNI[b]
+    if 32 <= b < 127:
+        return chr(b)
+    if b >= 128:
+        return "<%02X>" % b          # symbole CPC non cartographie
+    return ""
+
+
+class CpcScreen:
+    """Recompose l'affichage du CPC a partir du flux de caracteres.
+
+    Le CPC passe a la ligne suivante quand le curseur atteint le bord de
+    l'ecran, SANS emettre de CR/LF. Le flux est donc continu et tout se
+    colle si on l'affiche tel quel — un CAT devenait illisible. On
+    recompose donc les lignes a la largeur de l'ecran.
+
+    Les codes de controle sont consommes avec leurs parametres (voir
+    CTRL_PARAMS) ; le code 4 (MODE) ajuste la largeur automatiquement.
     """
-    out = []
-    for b in data:
-        if b in (10, 13, 9):
-            out.append(chr(b))
-        elif b in CPC_TO_UNI:
-            out.append(CPC_TO_UNI[b])
-        elif 32 <= b < 127:
-            out.append(chr(b))
-        elif b >= 128:
-            out.append("<%02X>" % b)     # symbole CPC non cartographie
-        # les autres (codes de controle et leurs parametres) sont ignores
-    return "".join(out).replace("\r\n", "\n").replace("\r", "\n")
+
+    def __init__(self, width=40, colour=True):
+        self.width = width
+        self.col = 0
+        self.pending = 0        # parametres restant a consommer
+        self.ctrl = None        # code de controle en cours
+        self.args = []
+        self.last_cr = False
+        self.wrapped = False    # on vient de replier : avaler un LF
+        # --- couleurs
+        self.colour = colour
+        self.inks = list(DEFAULT_INKS)
+        self.pen, self.paper = 1, 0
+        self.shown = None       # dernier couple (encre, papier) rendu
+        # Grille de cellules (code, encre, papier) par ligne : sert a
+        # l'afficheur graphique, qui a besoin des couleurs case par
+        # case et non d'un texte deja colore en ANSI.
+        self.cells = [[]]
+        self.font = None        # 2048 octets, quand le CPC les envoie
+
+    def _set_mode(self, mode):
+        self.width = MODE_WIDTH.get(mode & 3, 40)
+        self.col = 0
+
+    def _clear(self, out):
+        """Efface l'ecran, comme le CLS du CPC.
+
+        On applique d'abord la couleur courante : la sequence ANSI
+        d'effacement peint avec le fond actif, on obtient donc bien
+        un ecran de la couleur du papier, comme sur le CPC.
+        """
+        if self.colour:
+            self.shown = None
+            self._ansi(out)
+        out.append("\x1b[2J\x1b[H")
+        self.col = 0
+        self.wrapped = False
+        self.cells = [[]]
+
+    def _ansi(self, out):
+        """Emet la sequence ANSI si l'encre ou le papier a change."""
+        if not self.colour:
+            return
+        state = (self.pen, self.paper, tuple(self.inks))
+        if state == self.shown:
+            return
+        self.shown = state
+        fr, fg, fb = CPC_RGB[self.inks[self.pen & 15] % 27]
+        br, bg, bb = CPC_RGB[self.inks[self.paper & 15] % 27]
+        out.append("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm"
+                   % (fr, fg, fb, br, bg, bb))
+
+    def _newrow(self):
+        self.cells.append([])
+        if len(self.cells) > 120:           # borner la memoire
+            del self.cells[:-120]
+
+    def _newline(self, out):
+        out.append("\n")
+        self.col = 0
+        self.wrapped = False
+        self._newrow()
+
+    def _putc(self, out, code):
+        """Un caractere CPC : une cellule, une colonne.
+
+        On compte une seule colonne meme quand la traduction Unicode
+        occupe plusieurs signes (les <NN> non cartographies) : c'est la
+        largeur du CPC qui fait foi pour le repliage.
+        """
+        out.append(cpc_char(code))
+        # On ecrit A la colonne courante et non en fin de ligne : apres un
+        # CHR$(8) le CPC recouvre le caractere, il ne l'ajoute pas.
+        row = self.cells[-1]
+        while len(row) < self.col:
+            row.append((32, self.pen, self.paper))
+        if self.col < len(row):
+            row[self.col] = (code, self.pen, self.paper)
+        else:
+            row.append((code, self.pen, self.paper))
+        self.col += 1
+        if self.col >= self.width:
+            out.append("\n")
+            self.col = 0
+            self.wrapped = True
+            self._newrow()
+
+    def _done_ctrl(self, out):
+        """Un code de controle et ses parametres sont complets."""
+        c, a = self.ctrl, self.args
+        if c == 1:                      # afficher le caractere tel quel
+            self._putc(out, a[0])
+        elif c == 4:                    # CHR$(4) : MODE
+            self._set_mode(a[0])
+            self._clear(out)
+        elif c == 15:                   # CHR$(15) : encre
+            self.pen = a[0] & 15
+        elif c == 14:                   # CHR$(14) : papier
+            self.paper = a[0] & 15
+        elif c == 24:                   # echange encre / papier
+            self.pen, self.paper = self.paper, self.pen
+        elif c == 28:                   # CHR$(28) : redefinit une encre
+            self.inks[a[0] & 15] = a[1] % 27
+        elif c == 27:                   # marqueur du resident
+            if a[0] == MODE_MARK:
+                self._set_mode(a[1] - 0x30)
+                self._clear(out)        # le CPC efface a chaque MODE
+            elif a[0] == CLS_MARK:
+                self._clear(out)
+            elif a[0] == FONT_MARK:
+                self.font = bytes(a[1:1 + FONT_LEN])
+            elif a[0] == COL_MARK:
+                self.pen, self.paper = a[1] & 15, a[2] & 15
+                self.inks = [v % 27 for v in a[3:3 + 16]]
+        self.ctrl, self.args = None, []
+
+    def feed(self, data):
+        out = []
+        for b in data:
+            # --- parametres d'un code de controle en cours
+            if self.pending:
+                self.args.append(b)
+                self.pending -= 1
+                if self.pending == 0:
+                    self._done_ctrl(out)
+                continue
+
+            # --- ESC : marqueur du resident, longueur variable
+            if self.ctrl == 27 and not self.args:
+                self.args.append(b)
+                self.pending = ESC_LEN.get(b, 0)
+                if self.pending == 0:
+                    self._done_ctrl(out)
+                continue
+
+            was_cr, self.last_cr = self.last_cr, False
+
+            if b == 13:                          # CR
+                self._newline(out)
+                self.last_cr = True
+            elif b == 10:                        # LF
+                if not was_cr and not self.wrapped:
+                    self._newline(out)
+                self.wrapped = False
+            elif b == 12:                        # effacement de fenetre
+                self._clear(out)
+            elif b == 8:                         # curseur a gauche
+                if self.col > 0:                 # (recule sans effacer :
+                    self.col -= 1                # l'effacement, c'est
+                    out.append("\b")             # BS + espace + BS)
+            elif b == 9:                         # curseur a droite
+                self._putc(out, 32)
+            elif b == 27:                        # marqueur du resident
+                self.ctrl, self.pending, self.args = 27, 0, []
+            elif b < 32:                         # autre code de controle
+                n = CTRL_PARAMS.get(b, 0)
+                if n:
+                    self.ctrl, self.pending, self.args = b, n, []
+                else:
+                    self.ctrl, self.args = b, []
+                    self._done_ctrl(out)
+            else:
+                self.wrapped = False
+                self._ansi(out)
+                self._putc(out, b)
+        return "".join(out)
+
+
+def cpc_to_text(data):
+    """Conversion sans etat, pour les verifications ponctuelles."""
+    return CpcScreen().feed(data)
 
 
 def to_cpc(ch):
@@ -179,14 +404,15 @@ class Capture:
         return None
 
 
-def pump_output(link, write, capture=None):
+def pump_output(link, write, capture=None, screen=None):
     """Boucle de lecture : ecran du CPC -> sortie locale (+ capture)."""
+    screen = screen or CpcScreen()
     while True:
         data = link.sock.recv(4096)
         if not data:
             write("\n---- connexion fermee par le CPC ----\n")
             return
-        text = cpc_to_text(data)
+        text = screen.feed(data)
         if link.eat_nl and text.startswith("\n"):
             text = text[1:]         # saut de ligne d'apres-commande
             link.eat_nl = False
@@ -198,9 +424,12 @@ def pump_output(link, write, capture=None):
 
 
 # --------------------------------------------------------------- console
-def run_console(host, port):
+def run_console(host, port, width=40, colour=True, dump=False):
     link = Link(host, port)
     cap = Capture()
+    screen = CpcScreen(width, colour)
+    if dump:
+        link.send_key(CMD_DUMP)
     print("Connecte a %s:%d — commandes CPC, ou :aide (Ctrl+C pour quitter)\n"
           % (host, port))
 
@@ -208,7 +437,7 @@ def run_console(host, port):
         sys.stdout.write(text)
         sys.stdout.flush()
 
-    t = threading.Thread(target=pump_output, args=(link, write, cap),
+    t = threading.Thread(target=pump_output, args=(link, write, cap, screen),
                          daemon=True)
     t.start()
     try:
@@ -243,8 +472,8 @@ def run_console(host, port):
                     continue
                 if not b:
                     lost.add(c)
-                elif cpc_to_text(b) != c:
-                    subst[c] = cpc_to_text(b)
+                elif cpc_char(b[0]) != c:
+                    subst[c] = cpc_char(b[0])
             if subst:
                 write("[remplace : %s]\n"
                       % "  ".join("%s>%s" % kv for kv in sorted(subst.items())))
@@ -256,12 +485,18 @@ def run_console(host, port):
     finally:
         cap.stop()
         link.close()
+        if screen.colour:
+            sys.stdout.write("\x1b[0m")     # rendre ses couleurs au terminal
         print("\nau revoir")
 
 
 # ---------------------------------------------------------------- telnet
-def run_telnet(host, port, listen_port):
+def run_telnet(host, port, listen_port, width=40, colour=True,
+               dump=False):
     link = Link(host, port)
+    screen = CpcScreen(width, colour)
+    if dump:
+        link.send_key(CMD_DUMP)
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", listen_port))
@@ -287,7 +522,7 @@ def run_telnet(host, port, listen_port):
                         data = link.sock.recv(4096)
                         if not data:
                             break
-                        cli.sendall(cpc_to_text(data).encode("latin-1", "replace"))
+                        cli.sendall(screen.feed(data).encode("latin-1", "replace"))
                 except OSError:
                     pass
                 finally:
@@ -324,14 +559,24 @@ def main():
     p.add_argument("port", nargs="?", type=int, default=6128)
     p.add_argument("--telnet", action="store_true",
                    help="exposer un serveur telnet local au lieu de la console")
+    p.add_argument("--dump", action="store_true",
+                   help="a la connexion, relever l'ecran actuel du CPC "
+                        "(prend un instant : le firmware reconnait chaque "
+                        "caractere d'apres son dessin)")
+    p.add_argument("--mono", action="store_true",
+                   help="ne pas reproduire les couleurs du CPC")
+    p.add_argument("--width", type=int, default=40,
+                   help="largeur de l'ecran CPC (20/40/80 ; defaut 40, ajustee automatiquement si le CPC change de MODE)")
     p.add_argument("--listen", type=int, default=2323,
                    help="port du relais telnet (defaut 2323)")
     args = p.parse_args()
 
     if args.telnet:
-        run_telnet(args.host, args.port, args.listen)
+        run_telnet(args.host, args.port, args.listen, args.width,
+                   not args.mono, args.dump)
     else:
-        run_console(args.host, args.port)
+        run_console(args.host, args.port, args.width, not args.mono,
+                    args.dump)
 
 
 if __name__ == "__main__":

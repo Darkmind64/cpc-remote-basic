@@ -14,12 +14,16 @@
 ;     l'entree) se fait dans la SEULE RSX |TERMIO, sous une unique
 ;     selection de la ROM M4, appelee en boucle par le shell BASIC.
 ;
-; Deploiement (JAMAIS par RUN : un binaire lance par RUN ne peut pas
-; revenir) :
+; Le sens PC -> CPC passe par le detournement de l'editeur de ligne du
+; BASIC (entree EDIT du jumpblock, &BD5E) : la ligne recue est deposee
+; dans le tampon du BASIC, qui l'execute comme une frappe. Aucun
+; programme BASIC n'est necessaire, l'espace programme reste libre.
+;
+; Deploiement recommande : la ROM cpc/termrom2.s (|TERM des le boot).
+; Sinon, a la main — JAMAIS par RUN, un binaire lance par RUN ne peut
+; pas revenir :
 ;     MEMORY &7FFF
-;     LOAD"CTERM2.BIN" : CALL &8000
-; puis, cote CPC, lancer le shell BASIC (SHELL2.BAS) qui appelle
-; |TERM (ouvre la socket, attend le PC) puis |TERMIO en boucle.
+;     LOAD"CTERM2.BIN" : CALL &8000 : |TERM
 ; ------------------------------------------------------------------
 		.module	cterm2
 		.area	_HEADER (ABS)
@@ -44,7 +48,20 @@ MC_WAIT_FLYBACK	.equ	0xBD19
 KL_LOG_EXT	.equ	0xBCD1
 KL_FIND_COMMAND	.equ	0xBCD4		; HL=nom -> carry si la RSX existe deja
 KM_CHAR_RETURN	.equ	0xBB0C		; remet une touche (OK en premier plan)
+SCR_GET_MODE	.equ	0xBC11		; A = mode ecran courant (0..2)
+TXT_GET_PEN	.equ	0xBB93		; A = encre courante
+TXT_GET_PAPER	.equ	0xBB99		; A = papier courant
+SCR_GET_INK	.equ	0xBC35		; A = encre -> B = couleur (0..26)
 EDIT_JB		.equ	0xBD5E		; jumpblock EDIT (editeur de ligne BASIC)
+TXTCLS_JB	.equ	0xBB6C		; jumpblock TXT CLEAR WINDOW (CLS)
+TXT_RD_CHAR	.equ	0xBB60		; lit le caractere sous le curseur
+TXT_SET_CURSOR	.equ	0xBB75		; H = colonne, L = ligne
+TXT_GET_CURSOR	.equ	0xBB78		; -> H = colonne, L = ligne
+TXT_GET_MATRIX	.equ	0xBBA5		; A = caractere -> HL = matrice 8 octets
+KL_L_ROM_ENABLE	.equ	0xB906		; les matrices sont en ROM basse
+KL_L_ROM_DISABLE .equ	0xB909
+TXT_CUR_ON	.equ	0xBB81		; curseur visible pendant l'attente
+TXT_CUR_OFF	.equ	0xBB84
 EDPACE		.equ	5		; interroger la M4 1 trame sur 5 (~10 Hz)
 KL_ROM_SELECT	.equ	0xB90F		; C=ROM -> B=etat, C=ROM precedents
 KL_ROM_DESELECT	.equ	0xB918		; B=etat, C=ROM
@@ -235,6 +252,18 @@ rsx_term:	push	ix
 		ld	(rx_len),a
 		ld	(line_rdy),a
 		ld	(nomir),a
+		ld	a,#0xFF			; force l'envoi du MODE au demarrage
+		ld	(lastmode),a
+		ld	(colprev),a		; ... et des couleurs
+		ld	a,#4			; 1er tour = transition (client deja la)
+		ld	(laststat),a
+		xor	a
+		ld	(newconn),a
+		ld	(cmdmode),a
+		ld	(dumpreq),a
+		ld	(fontreq),a
+		ld	(mirecho),a
+		ld	(echo_from),a
 
 		call	find_m4_rom		; laisse la ROM appelante restauree
 		cp	#0xFF
@@ -247,44 +276,9 @@ rsx_term:	push	ix
 		ld	hl,(#0xFF06)		; sockinfo
 		ld	(sock_ptr),hl
 
-		ld	hl,#cmd_socket		; socket / bind / listen / accept
-		call	sendcmd
-		ld	hl,(resp_ptr)		; data[0] a resp+3
-		ld	de,#3
-		add	hl,de
-		ld	a,(hl)
-		cp	#0xFF
-		jp	z, tm_err_d
-		ld	(socknum),a
-		ld	(cmd_bind+3),a
-		ld	(cmd_listen+3),a
-		ld	(cmd_accept+3),a
-		ld	(cmd_close+3),a
-		ld	(cmd_recv+3),a
-		ld	(cmd_send+3),a
-
-		ld	l,a			; sockstat = sock_ptr + n*16
-		ld	h,#0
-		add	hl,hl
-		add	hl,hl
-		add	hl,hl
-		add	hl,hl
-		ld	de,(sock_ptr)
-		add	hl,de
-		ld	(sockstat_ptr),hl
-
-		ld	hl,#cmd_bind
-		call	sendcmd
-		call	resp0
+		call	net_open		; socket / bind / listen / accept
 		or	a
-		jr	nz, tm_err_d
-		ld	hl,#cmd_listen
-		call	sendcmd
-		call	resp0
-		or	a
-		jr	nz, tm_err_d
-		ld	hl,#cmd_accept
-		call	sendcmd
+		jp	nz, tm_err_d
 		call	desel_m4
 
 		ld	hl,#msg_wait
@@ -315,6 +309,7 @@ tm_stat:	call	sel_m4
 		ld	a,#1
 		ld	(active),a
 		call	install_edit		; detourner l'editeur de ligne
+		call	install_cls		; ... et les effacements d'ecran
 		ld	hl,#msg_on
 		jr	tm_end
 
@@ -343,6 +338,7 @@ rsx_termoff:	push	ix
 		xor	a
 		ld	(active),a
 		call	remove_edit		; rendre l'editeur de ligne
+		call	remove_cls		; ... et TXT CLEAR WINDOW
 		ld	hl,(hook_chain+1)	; rendre l'indirection
 		di
 		ld	(TXT_OA_ADDR),hl
@@ -372,30 +368,124 @@ out_hook:	push	af
 		ld	a,(nomir)		; echo local d'une ligne du PC :
 		or	a			; il s'affiche sur le CPC mais on
 		jr	nz, oh_out		; ne le renvoie pas au PC (doublon)
+		ld	a,c
+		call	tx_put
+oh_out:		pop	hl
+		pop	de
+		pop	bc
+		pop	af
+hook_chain:	jp	0x0000			; -> TXT OUT ACTION d'origine
+
+; --- empiler un octet (A) dans TXBUF, avec bouclage ---------------
+tx_put:		push	bc
+		push	de
+		push	hl
+		ld	c,a
 		ld	hl,(tx_tail)		; case suivante avec bouclage
 		inc	hl
 		ld	de,#TXBUF+TXSIZE
 		or	a
 		sbc	hl,de
-		jr	c, oh_nowrap
+		jr	c, tp_nowrap
 		ld	hl,#TXBUF
-		jr	oh_test
-oh_nowrap:	add	hl,de
-oh_test:	ld	de,(tx_head)		; tampon plein ? (on jette)
+		jr	tp_test
+tp_nowrap:	add	hl,de
+tp_test:	ld	de,(tx_head)		; tampon plein ? (on jette)
 		or	a
 		sbc	hl,de
-		jr	z, oh_out
+		jr	z, tp_out
 		add	hl,de
 		ex	de,hl
 		ld	hl,(tx_tail)
 		ld	(hl),c
 		ex	de,hl
 		ld	(tx_tail),hl
-oh_out:		pop	hl
+tp_out:		pop	hl
 		pop	de
 		pop	bc
+		ret
+
+; ==================================================================
+; Signaler au PC un changement de MODE ecran.
+;
+; La commande MODE du BASIC appelle SCR SET MODE directement : elle
+; n'emet PAS CHR$(4);CHR$(2) dans le flux d'affichage. Le PC ne peut
+; donc pas deviner la largeur en ecoutant les caracteres. On lit donc
+; le mode courant et, quand il change, on insere un marqueur
+; ESC 'M' <chiffre> dans le flux — le PC y ajuste sa largeur.
+; ==================================================================
+; ==================================================================
+; Signaler au PC l'etat des couleurs : encre, papier et les 16 entrees
+; de la palette. Comme pour le MODE, les commandes PEN / PAPER / INK
+; du BASIC appellent le firmware directement sans rien emettre dans le
+; flux d'affichage : c'est donc au resident de les relever.
+;
+; Marqueur : ESC 'C' <encre> <papier> <ink0..ink15> (18 octets).
+; Emis uniquement quand quelque chose a change.
+; ==================================================================
+send_colours:	call	TXT_GET_PEN		; A = encre courante
+		ld	(colbuf),a
+		call	TXT_GET_PAPER		; A = papier courant
+		ld	(colbuf+1),a
+		ld	hl,#colbuf+2
+		xor	a
+sc_ink:		push	af			; A = numero d'encre 0..15
+		push	hl
+		call	SCR_GET_INK		; -> B = 1re couleur (0..26)
+		ld	a,b
+		pop	hl
+		ld	(hl),a
+		inc	hl
 		pop	af
-hook_chain:	jp	0x0000			; -> TXT OUT ACTION d'origine
+		inc	a
+		cp	#16
+		jr	nz, sc_ink
+
+		ld	hl,#colbuf		; identique au dernier envoi ?
+		ld	de,#colprev
+		ld	b,#18
+sc_cmp:		ld	a,(de)
+		cp	(hl)
+		jr	nz, sc_send
+		inc	hl
+		inc	de
+		djnz	sc_cmp
+		ret				; rien n'a bouge
+
+sc_send:	ld	hl,#colbuf		; memoriser l'etat envoye
+		ld	de,#colprev
+		ld	bc,#18
+		ldir
+		ld	a,#0x1B			; ESC
+		call	tx_put
+		ld	a,#0x43			; 'C'
+		call	tx_put
+		ld	hl,#colbuf
+		ld	b,#18
+sc_emit:	ld	a,(hl)
+		push	hl
+		push	bc
+		call	tx_put
+		pop	bc
+		pop	hl
+		inc	hl
+		djnz	sc_emit
+		ret
+
+send_mode:	call	SCR_GET_MODE		; A = mode courant (0..2)
+		ld	hl,#lastmode
+		cp	(hl)
+		ret	z			; inchange
+		ld	(hl),a
+		push	af
+		ld	a,#0x1B			; ESC
+		call	tx_put
+		ld	a,#0x4D			; 'M'
+		call	tx_put
+		pop	af
+		add	a,#0x30			; '0' + mode
+		call	tx_put
+		ret
 
 ; ==================================================================
 ; |TERMIO,@a$ — LE point unique de dialogue avec la carte.
@@ -553,10 +643,14 @@ edit_hook:	ld	a,(active)
 		ld	(ed_buf),hl		; tampon fourni par le BASIC
 		xor	a
 		ld	(ed_tick),a
+		; L'editeur d'origine ne tourne plus : c'est a nous d'allumer
+		; le curseur, sinon le CPC parait fige pendant l'attente.
+		call	TXT_CUR_ON
 
 eh_loop:	call	KM_READ_CHAR		; une touche au clavier CPC ?
 		jr	nc, eh_nokey
 		call	KM_CHAR_RETURN		; la remettre pour l'editeur
+		call	TXT_CUR_OFF
 		ld	hl,(ed_buf)
 		jp	ed_tramp		; -> saisie locale normale
 
@@ -564,41 +658,133 @@ eh_nokey:	ld	a,(ed_tick)		; cadence douce : la M4 ne supporte
 		inc	a			; pas d'etre interrogee a 50 Hz
 		ld	(ed_tick),a
 		cp	#EDPACE
-		jr	c, eh_pause
+		jp	c, eh_pause
 		xor	a
 		ld	(ed_tick),a
+		call	send_mode		; MODE change ? prevenir le PC
+		call	send_colours		; couleurs changees ?
+		ld	a,(rx_len)		; ce qui arrivera apres sera echo
+		ld	(echo_from),a
 		call	sel_m4			; une transaction M4 complete
+		ld	hl,(sockstat_ptr)	; etat de la socket
+		ld	a,(hl)
+		cp	#3			; 3 = ferme par le distant
+		jr	z, eh_lost
+		cp	#240			; 240+ = erreur
+		jr	nc, eh_lost
+		ld	hl,#laststat		; transition attente -> connecte ?
+		ld	b,(hl)
+		ld	(hl),a
+		cp	#4			; 4 = en attente d'un client :
+		jr	z, eh_m4done		; ne rien emettre ni lire
+		ld	a,b
+		cp	#4
+		jr	z, eh_conn		; il vient d'arriver -> releve d'ecran
 		call	io_recv			; lire l'entree...
 		call	io_flushall		; ...puis vider la sortie
-		call	desel_m4
-		ld	a,(line_rdy)
-		or	a
-		jr	nz, eh_deliver
-eh_pause:	call	MC_WAIT_FLYBACK
-		jr	eh_loop
+		jr	eh_m4done
+eh_lost:	call	net_restart		; refermer et se remettre en ecoute
+		ld	a,#1
+		ld	(relisten),a
+		ld	a,#4			; de nouveau en ecoute
+		ld	(laststat),a
+		jr	eh_m4done
+eh_conn:	ld	a,#1			; un client vient de se connecter
+		ld	(newconn),a
+eh_m4done:	call	desel_m4
+		; Le curseur du CPC est un pave plein : ecrire a l'ecran
+		; pendant qu'il est affiche le laisserait derriere nous. On
+		; l'eteint le temps des sorties, on le rallume avant l'attente.
+		call	TXT_CUR_OFF
 
-		; --- livrer la ligne du PC au BASIC
-		; 1. l'afficher sur l'ecran du CPC (comme une frappe), mais
-		;    SANS la renvoyer au PC : sa console l'affiche deja.
-eh_deliver:	ld	a,#1
+		ld	a,(newconn)		; nouveau client : lui envoyer le MODE,
+		or	a			; les couleurs et l'ecran tel qu'il est
+		jr	z, eh_noconn
+		xor	a
+		ld	(newconn),a
+		dec	a			; 0xFF : forcer le renvoi
+		ld	(lastmode),a
+		ld	(colprev),a
+		call	send_mode
+		call	send_colours
+eh_noconn:	ld	a,(relisten)		; prevenir sur l'ecran du CPC, sans
+		or	a			; l'envoyer (plus personne au bout)
+		jr	z, eh_nomsg
+		xor	a
+		ld	(relisten),a
+		inc	a
 		ld	(nomir),a
-		ld	hl,#RXLINE
-		ld	a,(rx_len)
-		ld	b,a
-		or	a
+		ld	hl,#msg_relist
+		call	printz
+		xor	a
+		ld	(nomir),a
+		; --- echo des caracteres recus : le CPC les affiche comme
+		; une frappe. mirecho decide si le PC les revoit aussi (oui
+		; pour l'afficheur graphique, non pour la console qui a deja
+		; son propre echo local).
+		; L'ecran doit finir par montrer les rx_len caracteres de la
+		; ligne en cours ; il en montre echo_from. La difference dit
+		; tout : positive on affiche la suite, negative on efface.
+eh_nomsg:	ld	a,(rx_len)
+		ld	hl,#echo_from
+		sub	(hl)
 		jr	z, eh_noecho
-eh_echo:	ld	a,(hl)
+		push	af
+		ld	a,(mirecho)
+		xor	#1			; nomir = l'inverse de mirecho
+		ld	(nomir),a
+		pop	af
+		jr	nc, eh_add
+		neg				; combien de caracteres en trop
+		ld	b,a
+eh_del:		push	bc			; reculer, blanchir, reculer
+		ld	a,#8
+		call	TXT_OUTPUT
+		ld	a,#32
+		call	TXT_OUTPUT
+		ld	a,#8
+		call	TXT_OUTPUT
+		pop	bc
+		djnz	eh_del
+		jr	eh_endec
+eh_add:		ld	b,a			; b = nombre de caracteres nouveaux
+		ld	a,(echo_from)
+		ld	e,a
+		ld	d,#0
+		ld	hl,#RXLINE
+		add	hl,de
+eh_ec:		ld	a,(hl)
 		push	hl
 		push	bc
 		call	TXT_OUTPUT
 		pop	bc
 		pop	hl
 		inc	hl
-		djnz	eh_echo
-eh_noecho:	xor	a
+		djnz	eh_ec
+eh_endec:	xor	a
 		ld	(nomir),a
+eh_noecho:	ld	a,(fontreq)		; le PC a demande le jeu de caracteres ?
+		or	a
+		jr	z, eh_nofont
+		xor	a
+		ld	(fontreq),a
+		call	send_font
+eh_nofont:	ld	a,(dumpreq)		; le PC a demande un releve d'ecran ?
+		or	a
+		jr	z, eh_nodump
+		xor	a
+		ld	(dumpreq),a
+		call	screen_dump		; M4 depaginee : le bitmap est lisible
+eh_nodump:	ld	a,(line_rdy)
+		or	a
+		jr	nz, eh_deliver
+eh_pause:	call	TXT_CUR_ON
+		call	MC_WAIT_FLYBACK
+		jp	eh_loop
 
-		; 2. la deposer dans le tampon de ligne du BASIC
+		; --- livrer la ligne du PC au BASIC
+eh_deliver:	; La ligne a deja ete affichee au fil de la frappe : on
+		; la depose simplement dans le tampon de ligne du BASIC.
 		ld	hl,#RXLINE
 		ld	de,(ed_buf)
 		ld	a,(rx_len)
@@ -613,9 +799,177 @@ eh_cp:		ld	a,(hl)
 eh_term:	xor	a
 		ld	(de),a			; terminateur
 		ld	(rx_len),a		; ligne consommee
+		ld	(echo_from),a
 		ld	(line_rdy),a
 		ld	hl,(ed_buf)
 		scf				; carry = ligne validee
+		ret
+
+; ==================================================================
+; send_font — envoyer au PC le jeu de caracteres du CPC : les 256
+; matrices de 8 octets, soit 2 Ko.
+;
+; TXT GET MATRIX ne rend pas les octets mais un POINTEUR, et pour les
+; caracteres standard il pointe dans la ROM BASSE. Il faut donc
+; l'activer le temps de la copie (KL L ROM ENABLE). Notre resident vit
+; en &8000 et le tampon en &9000 : ni l'un ni l'autre n'est recouvert
+; par la ROM basse (&0000-&3FFF), la copie est donc sans danger.
+;
+; Interet : le PC affiche alors les VRAIES formes du CPC — y compris
+; les semi-graphiques et les symboles qu'on ne savait pas traduire en
+; Unicode — et suit automatiquement la ROM francaise comme les
+; caracteres redefinis par SYMBOL.
+; ==================================================================
+send_font:	ld	a,#0x1B			; ESC 'F' + 2048 octets
+		call	tx_put
+		ld	a,#0x46
+		call	tx_put
+		ld	c,#0			; code du caractere
+sf_char:	push	bc
+		ld	a,c
+		call	TXT_GET_MATRIX		; -> HL = adresse de la matrice
+		push	hl
+		call	KL_L_ROM_ENABLE
+		pop	hl
+		ld	b,#8
+sf_byte:	ld	a,(hl)			; tx_put preserve BC et HL
+		call	tx_put
+		inc	hl
+		djnz	sf_byte
+		call	KL_L_ROM_DISABLE
+		pop	bc
+		inc	c
+		jr	nz, sf_char		; 256 caracteres
+		ret
+
+; ==================================================================
+; screen_dump — envoyer au PC le contenu ACTUEL de l'ecran du CPC.
+;
+; La memoire ecran est un BITMAP, pas du texte : on ne peut pas la lire
+; directement. Mais le firmware sait reconnaitre un caractere d'apres
+; son dessin (TXT RD CHAR — c'est ce qui fait marcher la touche COPY).
+; On parcourt donc l'ecran case par case.
+;
+; Appele quand un client vient de se connecter : il voit ainsi l'ecran
+; tel qu'il est, au lieu d'une fenetre vide.
+;
+; Les espaces de fin de ligne sont supprimes — un ecran presque vide ne
+; coute alors que quelques dizaines d'octets au lieu de 1000.
+; ==================================================================
+screen_dump:	ld	a,#0x1B			; ESC 'L' : le PC efface d'abord
+		call	tx_put
+		ld	a,#0x4C
+		call	tx_put
+
+		call	SCR_GET_MODE		; largeur selon le mode courant
+		and	#3
+		ld	e,a
+		ld	d,#0
+		ld	hl,#modew
+		add	hl,de
+		ld	a,(hl)
+		ld	(scr_w),a
+
+		call	TXT_GET_CURSOR		; H = colonne, L = ligne
+		push	hl
+		ld	d,#1			; d = ligne courante
+sd_row:		ld	e,#1			; e = colonne courante
+		ld	hl,#dumpline
+sd_col:		push	de
+		push	hl
+		ld	h,e			; positionner le curseur
+		ld	l,d
+		call	TXT_SET_CURSOR
+		call	TXT_RD_CHAR		; carry + A = caractere reconnu
+		jr	c, sd_got
+		ld	a,#32			; case non reconnue -> espace
+sd_got:		pop	hl
+		ld	(hl),a
+		inc	hl
+		pop	de
+		inc	e
+		ld	a,(scr_w)
+		cp	e
+		jr	nc, sd_col
+
+		push	de			; --- oter les espaces de fin
+		ld	a,(scr_w)
+		ld	b,a
+		ld	e,a
+		ld	d,#0
+		ld	hl,#dumpline
+		add	hl,de
+		dec	hl
+sd_trim:	ld	a,(hl)
+		cp	#32
+		jr	nz, sd_emit
+		dec	hl
+		djnz	sd_trim
+sd_emit:	ld	hl,#dumpline		; --- emettre la ligne utile
+		ld	a,b
+		or	a
+		jr	z, sd_eol
+sd_ec:		ld	a,(hl)			; tx_put preserve BC/DE/HL
+		call	tx_put
+		inc	hl
+		djnz	sd_ec
+sd_eol:		ld	a,#13
+		call	tx_put
+		ld	a,#10
+		call	tx_put
+		pop	de
+		inc	d
+		ld	a,#25
+		cp	d
+		jr	nc, sd_row
+
+		pop	hl			; rendre le curseur ou il etait
+		jp	TXT_SET_CURSOR
+
+modew:		.db	20,40,80,40		; largeur selon le MODE
+
+; ==================================================================
+; HOOK DE TXT CLEAR WINDOW (&BB6C) — signaler les effacements d'ecran.
+;
+; La commande CLS du BASIC appelle cette routine du firmware ; comme le
+; BASIC est en ROM haute, elle passe forcement par le jumpblock, donc
+; elle est accrochable — meme raisonnement que pour EDIT (&BD5E).
+; On previent le PC par un marqueur ESC 'L', puis on enchaine.
+; ==================================================================
+cls_hook:	push	af
+		ld	a,(active)
+		or	a
+		jr	z, cls_pass
+		ld	a,#0x1B			; ESC
+		call	tx_put
+		ld	a,#0x4C			; 'L'
+		call	tx_put
+cls_pass:	pop	af
+		jp	cls_tramp
+
+install_cls:	ld	hl,#TXTCLS_JB		; sauver les 3 octets d'origine
+		ld	de,#cls_tramp
+		ld	bc,#3
+		ldir
+		ld	a,#0xC9			; ... suivis d'un RET
+		ld	(cls_tramp+3),a
+		di
+		ld	a,#0xC3			; JP cls_hook
+		ld	(TXTCLS_JB),a
+		ld	hl,#cls_hook
+		ld	(TXTCLS_JB+1),hl
+		ei
+		ret
+
+remove_cls:	ld	a,(cls_tramp)		; rien a restaurer ?
+		or	a
+		ret	z
+		di
+		ld	hl,#cls_tramp
+		ld	de,#TXTCLS_JB
+		ld	bc,#3
+		ldir
+		ei
 		ret
 
 ; --- installer / retirer le detournement de &BD5E -----------------
@@ -695,10 +1049,48 @@ ir_cp:		ld	a,(hl)
 		ret
 
 ; --- empiler un octet dans RXLINE ; CR (13) -> ligne prete ---------
-line_put:	cp	#10			; ignorer LF
+; Un octet &01 introduit une COMMANDE hors-bande venue du PC : l'octet
+; suivant n'est pas du texte pour le BASIC mais une instruction pour
+; nous. Seule commande pour l'instant : 'D' = relever l'ecran.
+; On se contente d'armer un drapeau — le relevé lit le bitmap ecran, or
+; la ROM M4 recouvre cette plage quand elle est paginee. Il doit donc
+; s'executer APRES depagination, pas ici.
+line_put:	ld	c,a
+		ld	a,(cmdmode)
+		or	a
+		jr	z, lp_normal
+		xor	a
+		ld	(cmdmode),a		; commande consommee
+		ld	a,c
+		cp	#0x44			; 'D' : relever l'ecran
+		jr	nz, lp_notd
+		ld	a,#1
+		ld	(dumpreq),a
+		ret
+lp_notd:	cp	#0x46			; 'F' : envoyer le jeu de caracteres
+		jr	nz, lp_notf
+		ld	a,#1
+		ld	(fontreq),a
+		ret
+lp_notf:	cp	#0x45			; 'E' : renvoyer l'echo des frappes
+		ret	nz
+		ld	a,#1
+		ld	(mirecho),a
+		ret
+lp_normal:	ld	a,c
+		cp	#0x01			; prefixe de commande
+		jr	nz, lp_char
+		ld	a,#1
+		ld	(cmdmode),a
+		ret
+lp_char:	cp	#10			; ignorer LF
 		ret	z
 		cp	#13			; CR = fin de ligne
 		jr	z, lp_eol
+		cp	#0x7F			; DEL = effacer le dernier caractere
+		jr	z, lp_del
+		cp	#8			; BS aussi, selon le terminal
+		jr	z, lp_del
 		ld	c,a			; sauver le caractere
 		ld	a,(rx_len)
 		cp	#RXMAXL
@@ -714,6 +1106,14 @@ line_put:	cp	#10			; ignorer LF
 		ret
 lp_eol:		ld	a,#1
 		ld	(line_rdy),a
+		ret
+		; On raccourcit simplement la ligne : c'est l'echo, plus bas,
+		; qui compare la longueur avant/apres et efface a l'ecran.
+lp_del:		ld	a,(rx_len)
+		or	a
+		ret	z			; rien a effacer
+		dec	a
+		ld	(rx_len),a
 		ret
 
 ; --- attendre la fin d'un envoi en cours (statut socket != 2) ------
@@ -758,6 +1158,71 @@ desel_m4:	ld	bc,(pg_bc)
 		call	KL_ROM_DESELECT
 		ei
 		ret
+
+; ==================================================================
+; net_open — creer la socket serveur : socket / bind / listen / accept.
+; M4 supposee SELECTIONNEE. Rend A = 0 si tout va bien.
+; ==================================================================
+net_open:	ld	hl,#cmd_socket
+		call	sendcmd
+		call	resp0
+		cp	#0xFF
+		ret	z			; creation refusee
+		ld	(socknum),a
+		ld	(cmd_bind+3),a
+		ld	(cmd_listen+3),a
+		ld	(cmd_accept+3),a
+		ld	(cmd_close+3),a
+		ld	(cmd_recv+3),a
+		ld	(cmd_send+3),a
+
+		ld	l,a			; sockstat = sock_ptr + n*16
+		ld	h,#0
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		add	hl,hl
+		ld	de,(sock_ptr)
+		add	hl,de
+		ld	(sockstat_ptr),hl
+
+		ld	hl,#cmd_bind
+		call	sendcmd
+		call	resp0
+		or	a
+		ret	nz
+		ld	hl,#cmd_listen
+		call	sendcmd
+		call	resp0
+		or	a
+		ret	nz
+		ld	hl,#cmd_accept
+		call	sendcmd
+		xor	a
+		ret
+
+; ==================================================================
+; net_restart — le PC s'est deconnecte : fermer proprement et se
+; remettre en ecoute, pour qu'on puisse relancer cpcterm.py sans
+; toucher au CPC.
+;
+; C_NETCLOSE n'est appele QUE sur une socket etablie ou fermee par le
+; distant : sur une socket en ecoute ou en etat transitoire, le
+; firmware M4 plante et resette le CPC (constate).
+; M4 supposee SELECTIONNEE.
+; ==================================================================
+net_restart:	ld	hl,#cmd_close
+		call	sendcmd
+		ld	hl,#TXBUF		; jeter la sortie devenue caduque
+		ld	(tx_head),hl
+		ld	(tx_tail),hl
+		xor	a
+		ld	(rx_len),a		; et l'entree en cours
+		ld	(line_rdy),a
+		ld	a,#0xFF			; re-signaler MODE et couleurs au
+		ld	(lastmode),a		; prochain PC
+		ld	(colprev),a
+		jp	net_open
 
 ; --- octet data[0] de la reponse (resp+3), M4 supposee selectionnee -
 resp0:		ld	hl,(resp_ptr)
@@ -870,6 +1335,8 @@ msg_on:		.ascii	"Terminal actif."
 		.db	13,10,0
 msg_off:	.ascii	"Terminal arrete."
 		.db	13,10,0
+msg_relist:	.ascii	"PC deconnecte - en ecoute sur 6128."
+		.db	13,10,0
 msg_already:	.ascii	"Deja actif."
 		.db	13,10,0
 msg_notact:	.ascii	"Terminal inactif."
@@ -903,7 +1370,21 @@ dbg_got:	.ds	1
 dbg_resp:	.ds	12
 sendbuf:	.ds	CHUNK+8		; [entete 6][donnees jusqu'a CHUNK]
 nomir:		.ds	1		; 1 = ne pas renvoyer l'affichage au PC
+lastmode:	.ds	1		; dernier MODE signale au PC
+relisten:	.ds	1		; 1 = annoncer la remise en ecoute
+mirecho:	.ds	1		; 1 = renvoyer l'echo au PC (afficheur)
+echo_from:	.ds	1		; longueur de ligne avant reception
+newconn:	.ds	1		; 1 = un client vient de se connecter
+cmdmode:	.ds	1		; 1 = l'octet suivant est une commande
+dumpreq:	.ds	1		; 1 = relever l'ecran des que possible
+fontreq:	.ds	1		; 1 = envoyer le jeu de caracteres
+colbuf:		.ds	18		; encre, papier, 16 couleurs de palette
+colprev:	.ds	18		; dernier etat signale au PC
+scr_w:		.ds	1		; largeur d'ecran pour le releve
+dumpline:	.ds	80		; une ligne d'ecran en cours de releve
+laststat:	.ds	1		; etat socket au tour precedent
 ed_buf:		.ds	2		; tampon de ligne fourni par le BASIC
 ed_tick:	.ds	1		; cadenceur d'interrogation M4
 ed_tramp:	.ds	4		; 3 octets d'origine de &BD5E + RET
+cls_tramp:	.ds	4		; 3 octets d'origine de &BB6C + RET
 rsx_chain:	.ds	4

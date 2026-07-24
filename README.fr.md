@@ -112,6 +112,21 @@ python pc/cpcterm.py <ip-du-cpc>
 Commandes locales de `cpcterm.py` : `:aide` pour l'aide, `:get prog.bas` … `:fin`
 pour capturer un `list` dans un fichier `.bas` propre côté PC.
 
+### Un afficheur graphique fidèle
+
+Pour une fenêtre qui ressemble à la vraie machine — les glyphes 8×8 du CPC, ses
+couleurs et ses proportions 4:3 plutôt que la police de ton terminal :
+
+```bash
+python pc/cpcview.py <ip-du-cpc>
+```
+
+Il récupère le jeu de caractères du CPC une seule fois et le met en cache dans
+`pc/cpcfont.bin` ; les lancements suivants sont immédiats (`--refont` pour le
+redemander). C'est le seul client qui affiche correctement les semi-graphiques et
+les symboles, puisqu'il dessine les vraies matrices du CPC au lieu de les traduire
+en Unicode.
+
 ### Jeu de caractères
 
 Le CPC n'est pas en Latin-1, et le modèle français suit l'ISO-646-FR : les
@@ -138,6 +153,7 @@ Pour arrêter et rendre ses hooks au firmware : `|TERMOFF` sur le CPC.
 | [`cpc/termrom2.s`](cpc/termrom2.s) | **La ROM** — ROM de fond qui embarque le cœur et expose `\|TERM` / `\|TERMOFF` dès le boot ; son init réserve la RAM au-dessus de `&8000` |
 | [`cpc/cterm2.s`](cpc/cterm2.s) | **Le résident** — hook d'affichage, hook `EDIT`, I/O réseau M4, RSX `\|TERM` `\|TERMOFF` `\|TERMIO` |
 | [`pc/cpcterm.py`](pc/cpcterm.py) | **Le terminal PC** — console ou relais telnet, capture d'écran vers fichier |
+| [`pc/cpcview.py`](pc/cpcview.py) | **L'afficheur graphique** — rend la vraie police 8×8 du CPC dans une fenêtre 4:3, police mise en cache dans `cpcfont.bin` |
 | [`pc/m4term.py`](pc/m4term.py) | Transfert et pilotage via l'API HTTP de la M4 (`ls`, `put`, `get`, `run`, `rom`, `reset`) |
 | [`cpc/keyscan.s`](cpc/keyscan.s) | Outil de sondage du firmware né de la traque (`\|KFIND` `\|KRAW` `\|KDUMP` `\|KPUSH` `\|KFULL`) — photo/comparaison mémoire, utile pour toute exploration de firmware CPC |
 | [`cpc/probe.s`](cpc/probe.s) | Sonde de pagination de la ROM M4 (`\|M4VER` `\|PGTEST` `\|PGASYNC`) |

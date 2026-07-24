@@ -231,6 +231,59 @@ n'est nécessaire. Une table de sauts à adresses fixes en tête de `cterm2.s`
 ROM des points d'entrée stables. Un second `|TERM` ne réécrase pas une session en
 cours : la ROM reconnaît un cœur déjà en place à sa table de sauts.
 
+## 8. Étape D — les finitions de fidélité (VALIDÉ 24/07/2026)
+
+Une fois le terminal utilisable, une série d'améliorations rapproche l'affichage
+PC de l'écran réel du CPC.
+
+### Un canal de commandes hors-bande
+
+Le PC pilote le résident sans passer par le BASIC : le préfixe **`&01`** suivi
+d'une lettre déclenche une action au lieu d'être tapé dans la ligne courante
+(`line_put` → `cmdmode`). Les lettres :
+
+| Commande | Effet |
+|----------|-------|
+| `&01 'D'` | relever le contenu actuel de l'écran (dump) |
+| `&01 'F'` | envoyer le jeu de caractères (256 × 8 octets, 2 Ko) |
+| `&01 'E'` | renvoyer l'écho des frappes (pour un client sans écho local) |
+
+En sens inverse, le résident annonce l'état de l'écran par des marqueurs `ESC` :
+`ESC 'M' n` (MODE), `ESC 'C' + 18 octets` (encre, papier, palette), `ESC 'L'`
+(CLS), `ESC 'F' + 2048 octets` (police). Le BASIC n'émet rien de tout cela — le
+résident interroge lui-même `SCR_GET_MODE`, `TXT_GET_PEN/PAPER`, `SCR_GET_INK` à
+chaque tour de boucle et n'émet un marqueur que sur changement.
+
+### L'écho des frappes et le curseur
+
+Le hook `EDIT` ne rend la main à l'éditeur d'origine que si une touche est
+pressée **au clavier du CPC**. Tant qu'on attend une ligne venue du PC, l'éditeur
+ne tourne pas : c'est donc au résident d'allumer le curseur (`TXT_CUR_ON` avant
+l'attente, `TXT_CUR_OFF` avant toute écriture, car le curseur CPC est un pavé
+plein qui resterait sinon derrière le texte).
+
+L'écho lui-même compare, à chaque réception, la longueur de la ligne **avant et
+après** : la différence dit s'il faut afficher la suite ou reculer-blanchir-reculer
+(`BS espace BS`) pour une correction. Le drapeau `mirecho` décide si cet écho est
+**aussi renvoyé au PC** : la console `cpcterm.py` a son propre écho local (on ne
+renvoie pas, `nomir`), l'afficheur graphique `cpcview.py` n'en a aucun et réclame
+le renvoi par `&01 'E'`.
+
+### L'afficheur graphique `cpcview.py`
+
+Aucune police PC ne reproduit les semi-graphiques, flèches et symboles du CPC :
+en console ils sortaient en `<NN>`. `cpcview.py` (tkinter + Pillow) dessine à la
+place les **vraies matrices 8×8** du CPC, obtenues une fois par `&01 'F'` et mises
+en cache dans `cpcfont.bin` — les lancements suivants sont immédiats. L'image est
+rendue à sa taille native puis étirée en **4:3** (les pixels du CPC ne sont pas
+carrés), d'où des caractères plus larges, fidèles aux proportions d'origine.
+
+### Connexions propres
+
+Fermer le client ne laisse plus de socket ouverte : le résident détecte l'état
+`3` (fermé par le distant) ou `≥ 240` (erreur), referme et se remet en écoute
+(`net_restart`), sans qu'il faille couper l'alimentation de la M4 et du CPC.
+
 ### Ancienne étape A (historique)
 
 `cpc/cterm.s` (sortie seule + tentatives d'injection clavier) est conservé comme

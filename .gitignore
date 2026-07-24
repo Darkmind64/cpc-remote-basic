@@ -41,3 +41,7 @@ downloads/
 
 # Genere par bin2inc.py a chaque build / generated on every build
 cpc/cterm2_blob.inc
+
+# Cache local du jeu de caracteres, recupere du CPC au 1er lancement de
+# cpcview.py / local font cache, fetched from the CPC on first run
+pc/cpcfont.bin

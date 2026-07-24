@@ -110,6 +110,20 @@ python pc/cpcterm.py <cpc-ip-address>
 Local commands inside `cpcterm.py`: `:aide` for help, `:get prog.bas` … `:fin`
 to capture a `list` into a clean `.bas` file on the PC.
 
+### A faithful graphical viewer
+
+For a window that looks like the real machine — the CPC's own 8×8 glyphs,
+colours and 4:3 proportions instead of your terminal's font:
+
+```bash
+python pc/cpcview.py <cpc-ip-address>
+```
+
+It fetches the CPC character set once and caches it in `pc/cpcfont.bin`, so later
+launches are instant (`--refont` to fetch it again). This is the only client that
+renders the block graphics and symbols correctly, since it draws the actual CPC
+matrices rather than mapping them to Unicode.
+
 ### Character set
 
 The CPC is not Latin-1, and the French model follows ISO-646-FR: the accented
@@ -136,6 +150,7 @@ To stop and restore the firmware hooks: `|TERMOFF` on the CPC.
 | [`cpc/termrom2.s`](cpc/termrom2.s) | **The ROM** — background ROM that carries the core and exposes `\|TERM` / `\|TERMOFF` from boot; its init reserves RAM above `&8000` |
 | [`cpc/cterm2.s`](cpc/cterm2.s) | **The resident** — output hook, `EDIT` hook, M4 network I/O, RSX `\|TERM` `\|TERMOFF` `\|TERMIO` |
 | [`pc/cpcterm.py`](pc/cpcterm.py) | **The PC terminal** — console or telnet relay, screen capture to file |
+| [`pc/cpcview.py`](pc/cpcview.py) | **The graphical viewer** — renders the CPC's real 8×8 font in a 4:3 window, font cached in `cpcfont.bin` |
 | [`pc/m4term.py`](pc/m4term.py) | File transfer / control over the M4's HTTP API (`ls`, `put`, `get`, `run`, `rom`, `reset`) |
 | [`cpc/keyscan.s`](cpc/keyscan.s) | Firmware-probing tool built during the hunt (`\|KFIND` `\|KRAW` `\|KDUMP` `\|KPUSH` `\|KFULL`) — memory snapshot/diff, useful for any CPC firmware spelunking |
 | [`cpc/probe.s`](cpc/probe.s) | M4 ROM paging probe (`\|M4VER` `\|PGTEST` `\|PGASYNC`) |
