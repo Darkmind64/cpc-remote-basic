@@ -25,6 +25,7 @@ import socket
 import sys
 import threading
 import time
+import unicodedata
 
 # Le CPC accumule les octets jusqu'au CR (tampon de ligne de 128 octets)
 # et le shell interroge la carte a ~10 Hz : on peut envoyer une ligne
@@ -110,7 +111,14 @@ def to_cpc(ch):
     o = ord(ch)
     if 32 <= o < 127:                # ASCII simple
         return bytes([o])
-    return b""                       # inconnu du CPC
+    # Repli : oter l'accent plutot que de perdre le caractere. Le CPC
+    # francais n'a que a-grave, c-cedille, e-aigu, u-grave, e-grave ;
+    # un i-circonflexe deviendrait sinon un trou (« Nmes »). On rend
+    # la lettre de base, ce qui donne « Nimes » — degrade mais lisible.
+    base = unicodedata.normalize("NFD", ch)[0]
+    if base != ch and 32 <= ord(base) < 127:
+        return bytes([ord(base)])
+    return b""                       # vraiment inconnu du CPC
 
 
 class Link:
@@ -229,9 +237,19 @@ def run_console(host, port):
                 continue
 
             pieces = [(c, to_cpc(c)) for c in line]
-            lost = sorted({c for c, b in pieces if not b and c not in "\r\n"})
+            subst, lost = {}, set()
+            for c, b in pieces:
+                if c in "\r\n":
+                    continue
+                if not b:
+                    lost.add(c)
+                elif cpc_to_text(b) != c:
+                    subst[c] = cpc_to_text(b)
+            if subst:
+                write("[remplace : %s]\n"
+                      % "  ".join("%s>%s" % kv for kv in sorted(subst.items())))
             if lost:
-                write("[ignore, absent du CPC : %s]\n" % " ".join(lost))
+                write("[ignore, absent du CPC : %s]\n" % " ".join(sorted(lost)))
             link.send_key(b"".join(b for _, b in pieces))
     except KeyboardInterrupt:
         pass
