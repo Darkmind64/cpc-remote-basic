@@ -526,16 +526,19 @@ class Viewer:
         except tk.TclError:
             messagebox.showwarning("Coller", "Presse-papiers vide ou inaccessible")
             return
+
+        # Normaliser les retours a la ligne : \r\n (Windows) et \n (Unix) -> \r (CPC)
+        text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
+
+        count = len(text)
         for ch in text:
-            if ch == "\n":
-                self.link.send(b"\r")  # LF -> CR sur le CPC
-            elif ch == "\r":
-                continue  # sauter les CR isoles (Keep only \n)
+            if ch == "\r":
+                self.link.send(b"\r")  # CR : saut de ligne sur le CPC
             else:
                 b = to_cpc(ch)
                 if b:
                     self.link.send(b)
-        self.set_status("Colle : %d caracteres" % len(text))
+        self.set_status("Colle : %d caracteres" % count)
 
     # --- rendu -----------------------------------------------------
     def tile(self, code, pen, paper):
