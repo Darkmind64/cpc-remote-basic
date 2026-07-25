@@ -407,12 +407,31 @@ class Viewer:
                     fields[key] = ("entry", entry)
                 elif ftype == "checkbox":
                     var = tk.BooleanVar()
-                    check = tk.Checkbutton(row, variable=var, bg="#101010",
-                                          fg="#ffff00", activebackground="#101010",
-                                          selectcolor="#ffff00", relief="raised",
-                                          borderwidth=2, padx=4, pady=2,
-                                          highlightthickness=0)
-                    check.pack(side="left", padx=6)
+                    # Créer une frame pour le label + checkbox
+                    cb_frame = tk.Frame(row, bg="#101010")
+                    cb_frame.pack(side="left", padx=6)
+
+                    cb_var = tk.StringVar(value="OFF")
+                    def on_toggle(v=var, s=cb_var):
+                        s.set("ON " if v.get() else "OFF")
+
+                    check = tk.Checkbutton(cb_frame, variable=var,
+                                          bg="#101010", fg="#ffffff",
+                                          activebackground="#101010",
+                                          selectcolor="#00ff00",
+                                          activefg="#00ff00",
+                                          relief="raised", borderwidth=2,
+                                          padx=8, pady=2, highlightthickness=0,
+                                          font=("Segoe UI", 9, "bold"),
+                                          command=on_toggle)
+                    check.pack(side="left")
+
+                    state_label = tk.Label(cb_frame, textvariable=cb_var,
+                                          bg="#101010", fg="#00aa00",
+                                          font=("Segoe UI", 9, "bold"),
+                                          width=4)
+                    state_label.pack(side="left", padx=4)
+
                     fields[key] = ("checkbox", var)
 
         # Boutons d'action en bas
