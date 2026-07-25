@@ -408,7 +408,10 @@ class Viewer:
                 elif ftype == "checkbox":
                     var = tk.BooleanVar()
                     check = tk.Checkbutton(row, variable=var, bg="#101010",
-                                          fg="#ffff00", activebackground="#101010")
+                                          fg="#ffff00", activebackground="#101010",
+                                          selectcolor="#ffff00", relief="raised",
+                                          borderwidth=2, padx=4, pady=2,
+                                          highlightthickness=0)
                     check.pack(side="left", padx=6)
                     fields[key] = ("checkbox", var)
 
