@@ -130,6 +130,7 @@ class Viewer:
         self.canvas.pack(side="top", fill="both", expand=True)
         root.bind("<Key>", self.on_key)
         root.bind("<F5>", lambda e: self.do_dump())
+        root.bind("<Control-v>", lambda e: self.paste())
         # Redimensionnement : on marque juste "a redessiner" ; la boucle
         # tick() redessine dans les 50 ms a la nouvelle taille (evite de
         # recalculer l'image a chaque pixel pendant qu'on tire la fenetre).
@@ -165,6 +166,11 @@ class Viewer:
             t.add_command(label="x%d  (%dx%d)" % (z, 160 * z, 120 * z),
                           command=lambda z=z: self.set_size(z))
         bar.add_cascade(label="Taille", menu=t)
+
+        # --- Édition
+        ed = tk.Menu(bar, tearoff=0)
+        ed.add_command(label="Coller", command=self.paste, accelerator="Ctrl+V")
+        bar.add_cascade(label="Édition", menu=ed)
 
         # --- carte M4 : les fonctions de l'interface web, via son API HTTP
         m4 = tk.Menu(bar, tearoff=0)
@@ -511,6 +517,25 @@ class Viewer:
             b = to_cpc(ev.char)
             if b:
                 self.link.send(b)
+
+    def paste(self):
+        """Lire le presse-papiers et envoyer le texte caractere par caractere
+        au CPC (avec conversion en codes CPC via to_cpc)."""
+        try:
+            text = self.root.clipboard_get()
+        except tk.TclError:
+            messagebox.showwarning("Coller", "Presse-papiers vide ou inaccessible")
+            return
+        for ch in text:
+            if ch == "\n":
+                self.link.send(b"\r")  # LF -> CR sur le CPC
+            elif ch == "\r":
+                continue  # sauter les CR isoles (Keep only \n)
+            else:
+                b = to_cpc(ch)
+                if b:
+                    self.link.send(b)
+        self.set_status("Colle : %d caracteres" % len(text))
 
     # --- rendu -----------------------------------------------------
     def tile(self, code, pen, paper):
