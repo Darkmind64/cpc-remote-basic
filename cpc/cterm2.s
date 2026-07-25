@@ -688,7 +688,37 @@ eh_loop:	call	KM_READ_CHAR		; une touche au clavier CPC ?
 		call	KM_CHAR_RETURN		; la remettre pour l'editeur
 		call	TXT_CUR_OFF
 		ld	hl,(ed_buf)
-		jp	ed_tramp		; -> saisie locale normale
+		; On APPELLE l'editeur d'origine (au lieu de sauter dedans) :
+		; il gere la saisie locale complete (curseur, COPY, correction)
+		; puis nous rend la main. On peut alors renvoyer la ligne tapee
+		; au PC, avant de la laisser au BASIC. La frappe caractere par
+		; caractere n'est pas accrochable (l'editeur lit le clavier en
+		; interne), mais la LIGNE validee, si.
+		call	ed_tramp		; -> retour : carry=validee, HL=ligne
+		push	af			; conserver le carry pour le BASIC
+		jr	nc, eh_lk_ret		; ESC : ne rien renvoyer au PC
+		ld	hl,(ed_buf)
+		call	mirror_line		; renvoyer la ligne locale au PC
+eh_lk_ret:	pop	af
+		ld	hl,(ed_buf)		; le BASIC attend HL = tampon de ligne
+		ret				; rendre la main au BASIC
+
+; --- renvoyer au PC une ligne tapee au clavier du CPC (HL = ligne
+; terminee par 0). L'editeur l'a deja affichee a l'ecran ; on l'empile
+; seulement vers le PC (tx_put, sans repasser par l'ecran) puis on vide.
+		; Pas de CR/LF ajoute : le CPC en emet un apres Entree, renvoye
+		; par le hook d'affichage. En ajouter un ici ferait une ligne
+		; vide en trop cote PC.
+mirror_line:	ld	a,(hl)
+		or	a
+		jr	z, ml_eol
+		call	tx_put			; tx_put preserve HL
+		inc	hl
+		jr	mirror_line
+ml_eol:		call	sel_m4
+		call	io_flushall
+		call	desel_m4
+		ret
 
 eh_nokey:	ld	a,(ed_tick)		; cadence douce : la M4 ne supporte
 		inc	a			; pas d'etre interrogee a 50 Hz
