@@ -408,22 +408,24 @@ class Viewer:
                 elif ftype == "checkbox":
                     var = tk.BooleanVar(value=False)
                     # Utiliser un Button plutôt qu'un Checkbutton pour plus de fiabilité
-                    def make_toggle(v=var):
-                        def toggle():
-                            v.set(not v.get())
-                            btn.config(bg="#00ff00" if v.get() else "#404040",
-                                      text="ON" if v.get() else "OFF")
-                        return toggle
-
-                    btn = tk.Button(row, text="OFF", command=make_toggle(),
+                    btn = tk.Button(row, text="OFF",
                                    bg="#404040", fg="#ffffff",
                                    activebackground="#00ff00",
                                    relief="raised", borderwidth=2,
                                    padx=8, pady=2, highlightthickness=0,
                                    font=("Segoe UI", 9, "bold"),
                                    width=6)
+
+                    def make_toggle(v=var, b=btn):
+                        def toggle():
+                            v.set(not v.get())
+                            b.config(bg="#00ff00" if v.get() else "#404040",
+                                    text="ON " if v.get() else "OFF")
+                        return toggle
+
+                    btn.config(command=make_toggle())
                     btn.pack(side="left", padx=6)
-                    fields[key] = ("checkbox", var)
+                    fields[key] = ("checkbox", (var, btn))
 
         # Boutons d'action en bas
         action_frame = tk.Frame(win, bg="#101010")
@@ -445,8 +447,12 @@ class Viewer:
                         widget.delete(0, "end")
                         widget.insert(0, str(val))
                     elif ftype == "checkbox":
+                        var, btn = widget
                         # Accepter "1", "true", "on" comme True; sinon False
-                        widget.set(str(val).lower() in ("1", "true", "yes", "on"))
+                        is_checked = str(val).lower() in ("1", "true", "yes", "on")
+                        var.set(is_checked)
+                        btn.config(bg="#00ff00" if is_checked else "#404040",
+                                  text="ON " if is_checked else "OFF")
             self.set_status("Parametres charges")
 
         def apply_changes():
@@ -456,7 +462,8 @@ class Viewer:
                 if ftype == "entry":
                     data[key] = widget.get()
                 elif ftype == "checkbox":
-                    data[key] = "1" if widget.get() else "0"
+                    var, btn = widget
+                    data[key] = "1" if var.get() else "0"
             self._m4_async("Application des parametres",
                           lambda: self._submit_m4_settings(data))
 
