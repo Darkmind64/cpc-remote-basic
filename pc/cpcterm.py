@@ -125,6 +125,7 @@ CPC_RGB = [
 # Palette par defaut du CPC : encre 0 = bleu, encre 1 = jaune vif.
 DEFAULT_INKS = [1, 24, 20, 6, 26, 0, 2, 8, 10, 12, 14, 16, 18, 22, 1, 16]
 MODE_WIDTH = {0: 20, 1: 40, 2: 80}
+SCREEN_HEIGHT = 25          # l'ecran texte du CPC : 25 lignes dans tous les modes
 
 
 def cpc_char(b):
@@ -166,7 +167,13 @@ class CpcScreen:
         # Grille de cellules (code, encre, papier) par ligne : sert a
         # l'afficheur graphique, qui a besoin des couleurs case par
         # case et non d'un texte deja colore en ANSI.
+        # Ecran FIXE facon CPC : une grille bornee a SCREEN_HEIGHT lignes,
+        # avec une ligne-curseur. Un saut de ligne descend le curseur ; il
+        # ne fait defiler (perdre la ligne du haut) QU'une fois arrive en
+        # bas. Un simple scrollback illimite decalait l'affichage d'une
+        # ligne (curseur = ligne en trop) et rognait le haut cote cpcview.
         self.cells = [[]]
+        self.row = 0            # ligne du curseur dans la grille
         self.font = None        # 2048 octets, quand le CPC les envoie
 
     def _set_mode(self, mode):
@@ -187,6 +194,7 @@ class CpcScreen:
         self.col = 0
         self.wrapped = False
         self.cells = [[]]
+        self.row = 0
 
     def _ansi(self, out):
         """Emet la sequence ANSI si l'encre ou le papier a change."""
@@ -202,9 +210,16 @@ class CpcScreen:
                    % (fr, fg, fb, br, bg, bb))
 
     def _newrow(self):
-        self.cells.append([])
-        if len(self.cells) > 120:           # borner la memoire
-            del self.cells[:-120]
+        # Descendre le curseur d'une ligne. On ne fait defiler (perdre la
+        # ligne du haut) QUE si le curseur etait deja sur la derniere ligne
+        # de l'ecran — exactement comme le CPC.
+        self.row += 1
+        if self.row >= SCREEN_HEIGHT:
+            self.cells.append([])
+            del self.cells[0]
+            self.row = SCREEN_HEIGHT - 1
+        elif self.row >= len(self.cells):
+            self.cells.append([])
 
     def _newline(self, out):
         out.append("\n")
@@ -222,7 +237,7 @@ class CpcScreen:
         out.append(cpc_char(code))
         # On ecrit A la colonne courante et non en fin de ligne : apres un
         # CHR$(8) le CPC recouvre le caractere, il ne l'ajoute pas.
-        row = self.cells[-1]
+        row = self.cells[self.row]
         while len(row) < self.col:
             row.append((32, self.pen, self.paper))
         if self.col < len(row):

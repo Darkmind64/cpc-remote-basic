@@ -105,6 +105,9 @@ class Viewer:
         self.link.send(CMD_ECHO)
         if self.font is None:
             self.link.send(CMD_FONT)        # premiere fois : la demander
+        # --dump releve l'ecran du CPC a la connexion : indispensable pour un
+        # affichage exact, car partant d'une fenetre vide on ne peut pas
+        # reconstituer ce qui etait affiche avant (sinon decalage d'une ligne).
         if want_dump:
             self.link.send(CMD_DUMP)
 
@@ -168,9 +171,8 @@ class Viewer:
             for c, (code, pen, paper) in enumerate(line[:w]):
                 frame.paste(self.tile(code, pen, paper), (c * CELL, r * CELL))
         # Le curseur : sur CPC c'est un pave plein, pas un trait clignotant.
-        # On le dessine en inversant la cellule de la position courante,
-        # c'est-a-dire la fin de la derniere ligne.
-        cr, cc = len(rows) - 1, self.screen.col
+        # On l'inverse a la position courante (ligne du curseur, colonne).
+        cr, cc = self.screen.row, self.screen.col
         if 0 <= cr < ROWS and cc < w:
             code, pen, paper = 32, self.screen.pen, self.screen.paper
             if cc < len(rows[cr]):
@@ -221,7 +223,8 @@ def main():
     p.add_argument("--refont", action="store_true",
                    help="redemander le jeu de caracteres au CPC")
     p.add_argument("--dump", action="store_true",
-                   help="relever l'ecran actuel du CPC a la connexion")
+                   help="relever l'ecran du CPC a la connexion (affichage "
+                        "exact ; sans, l'ecran se reconstruit au fil de la sortie)")
     args = p.parse_args()
 
     font = None if args.refont else load_font()

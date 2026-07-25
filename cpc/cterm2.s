@@ -979,12 +979,15 @@ sd_ec:		ld	a,(hl)			; tx_put preserve BC/DE/HL
 		call	tx_put
 		inc	hl
 		djnz	sd_ec
-sd_eol:		ld	a,#13
+sd_eol:		pop	de			; d = numero de ligne (1..25)
+		ld	a,d
+		cp	#25			; derniere ligne : PAS de CR/LF final,
+		jr	z, sd_nonl		; sinon une 26e ligne vide decalerait
+		ld	a,#13			; l'affichage PC (perte de la 1re ligne)
 		call	tx_put
 		ld	a,#10
 		call	tx_put
-		pop	de
-		inc	d
+sd_nonl:	inc	d
 		ld	a,#25
 		cp	d
 		jr	nc, sd_row
