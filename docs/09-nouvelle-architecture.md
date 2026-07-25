@@ -284,6 +284,55 @@ Fermer le client ne laisse plus de socket ouverte : le résident détecte l'éta
 `3` (fermé par le distant) ou `≥ 240` (erreur), referme et se remet en écoute
 (`net_restart`), sans qu'il faille couper l'alimentation de la M4 et du CPC.
 
+### Affichage progressif (list/print) — et pourquoi le cat se groupe
+
+Par défaut, la sortie s'accumule dans `TXBUF` et n'est vidée qu'au retour dans
+l'éditeur : un `list` n'apparaissait au PC qu'au `Ready`. Le hook d'affichage
+(`out_hook`) vide donc `TXBUF` **pendant** l'exécution, sur chaque retour-chariot.
+Deux gardes évitent de déstabiliser la carte :
+
+- un **verrou `in_m4`** (posé dans `sel_m4`/`desel_m4`) interdit à `out_hook` de
+  relancer une transaction M4 alors qu'une est en cours ;
+- on ne vide **que si la socket est libre** (statut ≠ 2) et si la ROM active
+  n'est pas la M4. Le `cat` lit la carte SD *via* la M4 (socket occupée, statut 2)
+  et tourne sous la ROM M4 : il se groupe donc au `Ready`, tandis que `list`/`print`
+  (ROM BASIC, socket libre) défilent ligne par ligne. La M4 s'auto-régule, sans
+  qu'on ait à distinguer les commandes par leur nom.
+
+### Le bug de lancement le plus coûteux : `xor a` dans `desel_m4`
+
+Le verrou `in_m4` est libéré dans `desel_m4` par `xor a` / `ld (in_m4),a`. Or
+`tm_wait` lit le **statut de la socket dans A** juste AVANT `desel_m4` puis le
+teste (`cp #4`) APRÈS : le `xor a` écrasait ce statut → lu comme 0 → pris pour un
+client déjà connecté → « Terminal actif » fantôme et churn dès `|term`, sans
+personne au bout. `desel_m4` **préserve désormais `AF`** autour de la libération.
+
+Leçon : une routine appelée entre « lire une valeur dans A » et « tester A » doit
+préserver `AF`. Le diagnostic a coûté des dizaines de builds car on cherchait la
+cause côté M4/timing/mémoire ; le test décisif fut un **remplissage mort** (même
+décalage mémoire, mais sans le code actif) qui, lui, attendait correctement —
+prouvant que la régression était un simple clobber de registre, pas la carte.
+
+### Écho de la frappe locale (CPC → PC)
+
+La frappe caractère par caractère au clavier du CPC n'est pas accrochable :
+l'éditeur de ligne lit le clavier en interne, hors des vecteurs du jumpblock
+(même mur que l'injection de touches, cf. `docs`/mémoire). On **appelle** donc
+l'éditeur d'origine (`call ed_tramp`) au lieu de sauter dedans : il gère la saisie
+locale complète (curseur, COPY, correction) puis nous rend la main, et on renvoie
+alors la **ligne validée** au PC (`mirror_line`). Pas de CR/LF ajouté : le CPC en
+émet un après Entrée, déjà renvoyé par le hook.
+
+### Côté PC : un écran fixe de 25 lignes (`CpcScreen`)
+
+`cpcview.py` reconstruit l'écran dans une grille **fixe de 25 lignes** avec une
+ligne-curseur : un saut de ligne descend le curseur et ne fait défiler (perdre la
+ligne du haut) qu'une fois arrivé en bas — exactement comme le CPC. Un simple
+scrollback « montrer les 25 dernières lignes » décalait l'affichage d'une ligne
+(la ligne-curseur en trop rognait le haut). À la connexion, `--dump` relève les
+25 lignes de l'écran courant (sans CR/LF après la dernière, sinon une 26e ligne
+vide décalait tout) ; sans `--dump`, l'écran se reconstruit au fil de la sortie.
+
 ### Ancienne étape A (historique)
 
 `cpc/cterm.s` (sortie seule + tentatives d'injection clavier) est conservé comme
