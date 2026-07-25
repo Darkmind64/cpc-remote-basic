@@ -264,6 +264,7 @@ rsx_term:	push	ix
 		ld	(fontreq),a
 		ld	(mirecho),a
 		ld	(echo_from),a
+		ld	(in_m4),a		; verrou libre au demarrage
 
 		call	find_m4_rom		; laisse la ROM appelante restauree
 		cp	#0xFF
@@ -370,6 +371,40 @@ out_hook:	push	af
 		jr	nz, oh_out		; ne le renvoie pas au PC (doublon)
 		ld	a,c
 		call	tx_put
+
+		; --- affichage progressif : sur un retour-chariot, vider TXBUF
+		; vers le PC PENDANT l'execution d'une commande (list, print...)
+		; au lieu d'attendre le retour dans l'editeur. Cadence par ligne.
+		; Le cat garde la socket occupee (statut 2) par ses lectures
+		; disque et tourne SOUS la ROM M4 : dans ces deux cas on n'insiste
+		; pas, la sortie partira au Ready (le cat se groupe, le list defile).
+		ld	a,c
+		cp	#13			; seulement en fin de ligne
+		jr	nz, oh_out
+		ld	a,(in_m4)		; transaction M4 deja en cours ?
+		or	a
+		jr	nz, oh_out
+		ld	a,(active)
+		or	a
+		jr	z, oh_out
+		ld	a,(laststat)		; un client est-il au bout ?
+		cp	#4
+		jr	z, oh_out
+		cp	#3
+		jr	z, oh_out
+		cp	#240
+		jr	nc, oh_out
+		call	sel_m4
+		ld	a,(pg_bc)		; ROM active avant = M4 ? (cat/disque)
+		ld	hl,#m4num
+		cp	(hl)
+		jr	z, oh_busy
+		ld	hl,(sockstat_ptr)	; socket disponible ?
+		ld	a,(hl)
+		cp	#2			; 2 = envoi en cours (M4 au disque)
+		jr	z, oh_busy
+		call	io_flushall
+oh_busy:	call	desel_m4
 oh_out:		pop	hl
 		pop	de
 		pop	bc
@@ -563,8 +598,9 @@ io_hdr:		ld	c,a			; c = taille donnees (<= CHUNK)
 		ldir				; hl avance jusqu'apres le morceau
 		pop	bc
 		push	hl			; hl = nouveau tx_head (avant wrap)
-		ld	hl,#sendbuf
-		call	sendcmd			; envoi d'un bloc, comme tcpecho
+		call	wait_send		; l'envoi precedent est-il fini ?
+		ld	hl,#sendbuf		; (cadence les flushs rapproches du
+		call	sendcmd			; streaming, sinon ils s'ecrasent)
 		pop	hl
 		ld	de,#TXBUF+TXSIZE	; avancer tx_head (avec wrap)
 		or	a
@@ -1148,6 +1184,8 @@ tx_used:	ld	hl,(tx_tail)
 ; on coupe pendant la transaction M4, on retablit apres. Pas de hook
 ; d'interruption qui pagine -> pas besoin de preserver l'etat IFF.
 sel_m4:		di
+		ld	a,#1
+		ld	(in_m4),a		; verrou anti-reentrance (out_hook)
 		ld	a,(m4num)
 		ld	c,a
 		call	KL_ROM_SELECT
@@ -1156,7 +1194,11 @@ sel_m4:		di
 
 desel_m4:	ld	bc,(pg_bc)
 		call	KL_ROM_DESELECT
-		ei
+		push	af			; PRESERVER A : les appelants lisent une
+		xor	a			; valeur (ex. le statut socket dans
+		ld	(in_m4),a		; tm_wait) AVANT desel_m4 et s'en servent
+		pop	af			; APRES. La liberer sans push/pop ecrasait
+		ei				; ce A -> statut lu comme 0 -> faux client.
 		ret
 
 ; ==================================================================
@@ -1383,6 +1425,7 @@ colprev:	.ds	18		; dernier etat signale au PC
 scr_w:		.ds	1		; largeur d'ecran pour le releve
 dumpline:	.ds	80		; une ligne d'ecran en cours de releve
 laststat:	.ds	1		; etat socket au tour precedent
+in_m4:		.ds	1		; 1 = transaction M4 en cours (anti-reentrance)
 ed_buf:		.ds	2		; tampon de ligne fourni par le BASIC
 ed_tick:	.ds	1		; cadenceur d'interrogation M4
 ed_tramp:	.ds	4		; 3 octets d'origine de &BD5E + RET
