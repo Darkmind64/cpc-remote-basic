@@ -175,6 +175,7 @@ class Viewer:
         # --- carte M4 : les fonctions de l'interface web, via son API HTTP
         m4 = tk.Menu(bar, tearoff=0)
         m4.add_command(label="Navigateur de fichiers...", command=self.m4_browse)
+        m4.add_command(label="Parametres...", command=self.m4_settings)
         m4.add_separator()
         m4.add_command(label="Envoyer un fichier vers la SD...",
                        command=self.m4_upload)
@@ -335,6 +336,172 @@ class Viewer:
         txt.pack(fill="both", expand=True)
         txt.insert("1.0", text)
         txt.config(state="disabled")
+
+    # --- panneau de parametres de la M4 (generique et extensible) ------
+    def m4_settings(self):
+        """Afficher les parametres de la M4 dans un panneau avec onglets.
+        Recupere les valeurs actuelles via HTTP, affiche un formulaire, et
+        permet de soumettre les modifications."""
+        win = tk.Toplevel(self.root)
+        win.title("Parametres M4")
+        win.geometry("600x500")
+        win.configure(bg="#101010")
+
+        # Definition des parametres par section (extensible)
+        sections = {
+            "General": [
+                ("Timezone", "tz", "text"),
+                ("NTP server", "ntp", "text"),
+                ("Netbios name", "nbname", "text"),
+                ("SSID", "ssid", "text"),
+                ("Password", "pass", "text"),
+            ],
+            "Network": [
+                ("Use DHCP", "dhcp", "checkbox"),
+                ("IP number", "ip", "text"),
+                ("Subnet", "subnet", "text"),
+                ("Gateway", "gw", "text"),
+                ("DNS 1", "dns1", "text"),
+                ("DNS 2", "dns2", "text"),
+            ],
+        }
+
+        # Creation des onglets
+        notebook = tk.PanedWindow(win, orient="vertical", bg="#101010",
+                                  sashwidth=0, relief="flat")
+        notebook.pack(fill="both", expand=True, padx=6, pady=6)
+
+        # Boutons d'onglet en haut
+        button_frame = tk.Frame(notebook, bg="#101010")
+        notebook.add(button_frame)
+
+        current_tab = tk.StringVar(value="General")
+        tab_buttons = {}
+
+        def show_tab(tab_name):
+            current_tab.set(tab_name)
+            # Rendre visibles/invisibles les frames des sections
+            for name, frame in tab_frames.items():
+                if name == tab_name:
+                    frame.pack(fill="both", expand=True)
+                else:
+                    frame.pack_forget()
+
+        for section_name in sections.keys():
+            btn = tk.Button(button_frame, text=section_name,
+                           command=lambda s=section_name: show_tab(s),
+                           bg="#1060c0", fg="#ffff00", font=("Segoe UI", 10),
+                           padx=12, pady=4)
+            btn.pack(side="left", padx=2)
+            tab_buttons[section_name] = btn
+
+        # Frames pour chaque onglet
+        tab_frames = {}
+        fields = {}
+
+        for section_name, params in sections.items():
+            frame = tk.Frame(notebook, bg="#101010")
+            notebook.add(frame)
+            tab_frames[section_name] = frame
+
+            # ScrollBar pour les longs formulaires
+            canvas = tk.Canvas(frame, bg="#101010", highlightthickness=0)
+            scrollbar = tk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas, bg="#101010")
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+
+            # Ajouter les champs
+            for label, key, ftype in params:
+                row = tk.Frame(scrollable_frame, bg="#101010")
+                row.pack(fill="x", padx=6, pady=4)
+
+                lbl = tk.Label(row, text=label + ":", bg="#101010", fg="#e0e0e0",
+                              width=15, anchor="w", font=("Segoe UI", 10))
+                lbl.pack(side="left")
+
+                if ftype == "text":
+                    entry = tk.Entry(row, bg="#000030", fg="#e0e0e0",
+                                    font=("Consolas", 10))
+                    entry.pack(side="left", fill="x", expand=True, padx=6)
+                    fields[key] = ("entry", entry)
+                elif ftype == "checkbox":
+                    var = tk.BooleanVar()
+                    check = tk.Checkbutton(row, variable=var, bg="#101010",
+                                          fg="#ffff00", activebackground="#101010")
+                    check.pack(side="left", padx=6)
+                    fields[key] = ("checkbox", var)
+
+        # Boutons d'action en bas
+        action_frame = tk.Frame(win, bg="#101010")
+        action_frame.pack(fill="x", padx=6, pady=6)
+
+        def reload_values():
+            """Recharger les valeurs actuelles de la M4."""
+            self.set_status("Chargement des parametres...")
+            self._m4_async("Lecture des parametres",
+                          lambda: self._fetch_m4_settings(),
+                          lambda vals: update_form(vals))
+
+        def update_form(values):
+            """Remplir le formulaire avec les valeurs recuperees."""
+            for key, (ftype, widget) in fields.items():
+                if key in values:
+                    if ftype == "entry":
+                        widget.delete(0, "end")
+                        widget.insert(0, str(values[key]))
+                    elif ftype == "checkbox":
+                        widget.set(bool(values[key]))
+            self.set_status("Parametres charges")
+
+        def apply_changes():
+            """Soumettre les modifications a la M4."""
+            data = {}
+            for key, (ftype, widget) in fields.items():
+                if ftype == "entry":
+                    data[key] = widget.get()
+                elif ftype == "checkbox":
+                    data[key] = "1" if widget.get() else "0"
+            self._m4_async("Application des parametres",
+                          lambda: self._submit_m4_settings(data))
+
+        tk.Button(action_frame, text="Actualiser", command=reload_values,
+                 bg="#1060c0", fg="#ffff00").pack(side="left", padx=4)
+        tk.Button(action_frame, text="Appliquer", command=apply_changes,
+                 bg="#1060c0", fg="#ffff00").pack(side="left", padx=4)
+        tk.Button(action_frame, text="Fermer", command=win.destroy,
+                 bg="#404040", fg="#c0c0c0").pack(side="right", padx=4)
+
+        # Afficher la 1re section et charger les donnees
+        show_tab("General")
+        reload_values()
+
+    def _fetch_m4_settings(self):
+        """Recuperer les parametres actuels de la M4 via HTTP."""
+        import re
+        html = self.m4._get("settings.shtml").decode("latin-1", "replace")
+        values = {}
+        # Parser regex simple pour extraire les valeurs des champs input/checkbox
+        # Format: <input name="tz" value="1"> ou <input name="dhcp" checked>
+        for match in re.finditer(r'<input[^>]*name=["\']?(\w+)["\']?[^>]*value=["\']?([^"\'> ]*)["\']?', html):
+            values[match.group(1)] = match.group(2)
+        for match in re.finditer(r'<input[^>]*name=["\']?(\w+)["\']?[^>]*(checked)[^>]*', html):
+            values[match.group(1)] = "1"
+        return values
+
+    def _submit_m4_settings(self, data):
+        """Soumettre les modifications de parametres a la M4."""
+        # Construire l'URL avec les parametres
+        import urllib.parse
+        params = urllib.parse.urlencode(data, quote_via=urllib.parse.quote)
+        self.m4._get("config.cgi", **data)
+        return "OK"
 
     # --- navigateur de fichiers graphique de la SD --------------------
     def m4_browse(self):
