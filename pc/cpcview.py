@@ -519,26 +519,37 @@ class Viewer:
                 self.link.send(b)
 
     def paste(self):
-        """Lire le presse-papiers et envoyer le texte caractere par caractere
-        au CPC (avec conversion en codes CPC via to_cpc)."""
+        """Lire le presse-papiers et envoyer le texte ligne par ligne au CPC.
+        Chaque ligne est envoyee avec un delai entre elles pour laisser le
+        BASIC traiter et afficher le prompt."""
         try:
             text = self.root.clipboard_get()
         except tk.TclError:
             messagebox.showwarning("Coller", "Presse-papiers vide ou inaccessible")
             return
 
-        # Normaliser les retours a la ligne : \r\n (Windows) et \n (Unix) -> \r (CPC)
-        text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
+        # Normaliser et decouper par lignes
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        lines = text.split("\n")
+        lines = [l for l in lines if l]  # ignorer les lignes vides
 
-        count = len(text)
-        for ch in text:
-            if ch == "\r":
-                self.link.send(b"\r")  # CR : saut de ligne sur le CPC
-            else:
+        def send_line(index):
+            if index >= len(lines):
+                self.set_status("Colle : %d lignes terminees" % len(lines))
+                return
+            line = lines[index]
+            # Envoyer les caracteres de la ligne
+            for ch in line:
                 b = to_cpc(ch)
                 if b:
                     self.link.send(b)
-        self.set_status("Colle : %d caracteres" % count)
+            # Puis CR (Entree) pour executer la ligne
+            self.link.send(b"\r")
+            # Planifier l'envoi de la ligne suivante avec 150ms de delai
+            self.root.after(150, lambda: send_line(index + 1))
+
+        self.set_status("Collage de %d lignes en cours..." % len(lines))
+        send_line(0)
 
     # --- rendu -----------------------------------------------------
     def tile(self, code, pen, paper):
