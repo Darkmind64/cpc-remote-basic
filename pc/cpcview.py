@@ -427,11 +427,13 @@ class Viewer:
             """Remplir le formulaire avec les valeurs recuperees."""
             for key, (ftype, widget) in fields.items():
                 if key in values:
+                    val = values[key]
                     if ftype == "entry":
                         widget.delete(0, "end")
-                        widget.insert(0, str(values[key]))
+                        widget.insert(0, str(val))
                     elif ftype == "checkbox":
-                        widget.set(bool(values[key]))
+                        # Accepter "1", "true", "on" comme True; sinon False
+                        widget.set(str(val).lower() in ("1", "true", "yes", "on"))
             self.set_status("Parametres charges")
 
         def apply_changes():
