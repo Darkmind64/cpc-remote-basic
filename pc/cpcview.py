@@ -545,8 +545,9 @@ class Viewer:
                     self.link.send(b)
             # Puis CR (Entree) pour executer la ligne
             self.link.send(b"\r")
-            # Planifier l'envoi de la ligne suivante avec 150ms de delai
-            self.root.after(150, lambda: send_line(index + 1))
+            # Planifier l'envoi de la ligne suivante avec 250ms de delai
+            # (laisser le BASIC traiter la ligne, afficher le resultat, remonter)
+            self.root.after(250, lambda: send_line(index + 1))
 
         self.set_status("Collage de %d lignes en cours..." % len(lines))
         send_line(0)
