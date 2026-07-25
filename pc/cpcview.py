@@ -30,7 +30,7 @@ import socket
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from PIL import Image, ImageTk
 
@@ -366,47 +366,20 @@ class Viewer:
             ],
         }
 
-        # Creation des onglets
-        notebook = tk.PanedWindow(win, orient="vertical", bg="#101010",
-                                  sashwidth=0, relief="flat")
+        # Creation des onglets (ttk.Notebook = vrais onglets)
+        notebook = ttk.Notebook(win)
         notebook.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # Boutons d'onglet en haut
-        button_frame = tk.Frame(notebook, bg="#101010")
-        notebook.add(button_frame)
-
-        current_tab = tk.StringVar(value="General")
-        tab_buttons = {}
-
-        def show_tab(tab_name):
-            current_tab.set(tab_name)
-            # Rendre visibles/invisibles les frames des sections
-            for name, frame in tab_frames.items():
-                if name == tab_name:
-                    frame.pack(fill="both", expand=True)
-                else:
-                    frame.pack_forget()
-
-        for section_name in sections.keys():
-            btn = tk.Button(button_frame, text=section_name,
-                           command=lambda s=section_name: show_tab(s),
-                           bg="#1060c0", fg="#ffff00", font=("Segoe UI", 10),
-                           padx=12, pady=4)
-            btn.pack(side="left", padx=2)
-            tab_buttons[section_name] = btn
-
-        # Frames pour chaque onglet
-        tab_frames = {}
         fields = {}
 
         for section_name, params in sections.items():
-            frame = tk.Frame(notebook, bg="#101010")
-            notebook.add(frame)
-            tab_frames[section_name] = frame
+            # Frame pour cet onglet
+            tab = tk.Frame(notebook, bg="#101010")
+            notebook.add(tab, text=section_name)
 
             # ScrollBar pour les longs formulaires
-            canvas = tk.Canvas(frame, bg="#101010", highlightthickness=0)
-            scrollbar = tk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+            canvas = tk.Canvas(tab, bg="#101010", highlightthickness=0)
+            scrollbar = tk.Scrollbar(tab, orient="vertical", command=canvas.yview)
             scrollable_frame = tk.Frame(canvas, bg="#101010")
             scrollable_frame.bind(
                 "<Configure>",
@@ -428,7 +401,7 @@ class Viewer:
 
                 if ftype == "text":
                     entry = tk.Entry(row, bg="#000030", fg="#e0e0e0",
-                                    font=("Consolas", 10))
+                                    font=("Consolas", 10), width=30)
                     entry.pack(side="left", fill="x", expand=True, padx=6)
                     fields[key] = ("entry", entry)
                 elif ftype == "checkbox":
@@ -478,8 +451,7 @@ class Viewer:
         tk.Button(action_frame, text="Fermer", command=win.destroy,
                  bg="#404040", fg="#c0c0c0").pack(side="right", padx=4)
 
-        # Afficher la 1re section et charger les donnees
-        show_tab("General")
+        # Charger les donnees
         reload_values()
 
     def _fetch_m4_settings(self):
@@ -487,19 +459,25 @@ class Viewer:
         import re
         html = self.m4._get("settings.shtml").decode("latin-1", "replace")
         values = {}
-        # Parser regex simple pour extraire les valeurs des champs input/checkbox
-        # Format: <input name="tz" value="1"> ou <input name="dhcp" checked>
-        for match in re.finditer(r'<input[^>]*name=["\']?(\w+)["\']?[^>]*value=["\']?([^"\'> ]*)["\']?', html):
-            values[match.group(1)] = match.group(2)
-        for match in re.finditer(r'<input[^>]*name=["\']?(\w+)["\']?[^>]*(checked)[^>]*', html):
-            values[match.group(1)] = "1"
+        # Extraire chaque tag <input ... >
+        for tag in re.finditer(r'<input[^>]*?>', html, re.IGNORECASE):
+            tag_str = tag.group(0)
+            # Extraire name
+            name_match = re.search(r'name\s*=\s*["\']?(\w+)["\']?', tag_str, re.IGNORECASE)
+            if not name_match:
+                continue
+            name = name_match.group(1)
+            # Extraire value (optionnel, avec ou sans guillemets)
+            value_match = re.search(r'value\s*=\s*["\']?([^"\'\s>]*)["\']?', tag_str, re.IGNORECASE)
+            if value_match and value_match.group(1):
+                values[name] = value_match.group(1)
+            # Si checked, c'est un checkbox (implicite à 1)
+            elif 'checked' in tag_str.lower():
+                values[name] = "1"
         return values
 
     def _submit_m4_settings(self, data):
         """Soumettre les modifications de parametres a la M4."""
-        # Construire l'URL avec les parametres
-        import urllib.parse
-        params = urllib.parse.urlencode(data, quote_via=urllib.parse.quote)
         self.m4._get("config.cgi", **data)
         return "OK"
 
