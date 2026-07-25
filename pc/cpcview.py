@@ -467,9 +467,9 @@ class Viewer:
             if not name_match:
                 continue
             name = name_match.group(1)
-            # Extraire value (optionnel, avec ou sans guillemets)
+            # Extraire value (optionnel, avec ou sans guillemets; accepte valeurs vides)
             value_match = re.search(r'value\s*=\s*["\']?([^"\'\s>]*)["\']?', tag_str, re.IGNORECASE)
-            if value_match and value_match.group(1):
+            if value_match:
                 values[name] = value_match.group(1)
             # Si checked, c'est un checkbox (implicite à 1)
             elif 'checked' in tag_str.lower():
