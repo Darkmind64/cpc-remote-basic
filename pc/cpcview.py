@@ -406,15 +406,23 @@ class Viewer:
                     entry.pack(side="left", fill="x", expand=True, padx=6)
                     fields[key] = ("entry", entry)
                 elif ftype == "checkbox":
-                    var = tk.BooleanVar()
-                    check = tk.Checkbutton(row, variable=var,
-                                          bg="#101010", fg="#ffffff",
-                                          activebackground="#101010",
-                                          selectcolor="#00ff00",
-                                          relief="raised", borderwidth=2,
-                                          padx=8, pady=2, highlightthickness=0,
-                                          font=("Segoe UI", 9, "bold"))
-                    check.pack(side="left", padx=6)
+                    var = tk.BooleanVar(value=False)
+                    # Utiliser un Button plutôt qu'un Checkbutton pour plus de fiabilité
+                    def make_toggle(v=var):
+                        def toggle():
+                            v.set(not v.get())
+                            btn.config(bg="#00ff00" if v.get() else "#404040",
+                                      text="ON" if v.get() else "OFF")
+                        return toggle
+
+                    btn = tk.Button(row, text="OFF", command=make_toggle(),
+                                   bg="#404040", fg="#ffffff",
+                                   activebackground="#00ff00",
+                                   relief="raised", borderwidth=2,
+                                   padx=8, pady=2, highlightthickness=0,
+                                   font=("Segoe UI", 9, "bold"),
+                                   width=6)
+                    btn.pack(side="left", padx=6)
                     fields[key] = ("checkbox", var)
 
         # Boutons d'action en bas
