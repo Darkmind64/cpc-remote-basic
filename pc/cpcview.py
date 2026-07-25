@@ -348,18 +348,19 @@ class Viewer:
         win.configure(bg="#101010")
 
         # Definition des parametres par section (extensible)
+        # Clés correspond aux noms d'attributs name= du HTML /settings.shtml
         sections = {
             "General": [
-                ("Timezone", "tz", "text"),
+                ("Timezone", "zone", "text"),
                 ("NTP server", "ntp", "text"),
-                ("Netbios name", "nbname", "text"),
+                ("Netbios name", "navn", "text"),
                 ("SSID", "ssid", "text"),
-                ("Password", "pass", "text"),
+                ("Password", "pw", "text"),
             ],
             "Network": [
                 ("Use DHCP", "dhcp", "checkbox"),
                 ("IP number", "ip", "text"),
-                ("Subnet", "subnet", "text"),
+                ("Subnet", "nm", "text"),
                 ("Gateway", "gw", "text"),
                 ("DNS 1", "dns1", "text"),
                 ("DNS 2", "dns2", "text"),
