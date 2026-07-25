@@ -333,6 +333,28 @@ scrollback « montrer les 25 dernières lignes » décalait l'affichage d'une li
 25 lignes de l'écran courant (sans CR/LF après la dernière, sinon une 26e ligne
 vide décalait tout) ; sans `--dump`, l'écran se reconstruit au fil de la sortie.
 
+### Interface graphique de `cpcview` : menus, redimensionnement, carte M4
+
+`cpcview` est devenu une petite station de travail :
+
+- **Fenêtre redimensionnable** : l'image s'étire dans le plus grand rectangle 4:3
+  tenant dans la fenêtre (bandes noires sinon), les caractères suivent la taille.
+  Menu *Taille* pour des tailles prédéfinies (×2 à ×6).
+- **Barre de statut** en bas : IP, état de connexion, MODE écran, position du
+  curseur, et le résultat de la dernière opération.
+- **Menu M4** : toutes les fonctions de l'interface web de la carte, via son API
+  HTTP (port 80), réutilisée depuis `pc/m4term.py` (classe `M4`). Un **navigateur
+  de fichiers** graphique liste la SD (`dir.txt` au format `nom,type,taille`,
+  type 0 = dossier), avec envoi / téléchargement / suppression / création de
+  dossier / lancement, plus la gestion des ROMs (installer/supprimer un slot) et
+  les resets CPC/M4. Les appels réseau tournent en tâche de fond (pas de gel).
+
+Point notable : **lancer un programme** se fait par **injection de `RUN"…"` dans
+le terminal**, et non via le `run2` de la M4. Ce dernier fait un chargement
+bas-niveau qui écrase le résident en &8000 (terminal muet ensuite) ; par le
+terminal, le programme tourne sous BASIC, sa sortie est renvoyée, et la main
+revient au terminal quand il se termine.
+
 ### Ancienne étape A (historique)
 
 `cpc/cterm.s` (sortie seule + tentatives d'injection clavier) est conservé comme

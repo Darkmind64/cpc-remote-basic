@@ -127,6 +127,14 @@ redemander). C'est le seul client qui affiche correctement les semi-graphiques e
 les symboles, puisqu'il dessine les vraies matrices du CPC au lieu de les traduire
 en Unicode.
 
+La fenêtre est redimensionnable (les caractères suivent la taille, en gardant le
+4:3), affiche une barre de statut (IP, état, MODE écran, position du curseur), et
+un **menu M4** qui reprend l'interface web de la carte via son API HTTP : un
+**navigateur de fichiers** graphique de la SD (envoi / téléchargement / suppression
+/ lancement / création de dossier), la gestion des slots ROM, et les resets
+CPC/M4. `--dump` relève l'écran courant du CPC à la connexion pour un départ
+exact.
+
 ### Jeu de caractères
 
 Le CPC n'est pas en Latin-1, et le modèle français suit l'ISO-646-FR : les

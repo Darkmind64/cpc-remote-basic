@@ -30,11 +30,13 @@ import socket
 import sys
 import threading
 import tkinter as tk
+from tkinter import filedialog, messagebox, simpledialog
 
 from PIL import Image, ImageTk
 
 from cpcterm import (CMD_DUMP, CMD_ECHO, CMD_FONT, CPC_RGB, FONT_LEN,
                      CpcScreen, to_cpc)
+from m4term import M4                 # client HTTP de la carte M4 (reutilise)
 
 FONT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "cpcfont.bin")
@@ -83,6 +85,23 @@ def glyph_rows(font, code):
     return tuple(font[o:o + CELL])
 
 
+def parse_dir(text):
+    """Analyse le dir.txt de la M4 : lignes 'nom,type,taille' (type 0 =
+    dossier, 1 = fichier ; la 1re ligne est le chemin et n'a pas de virgules).
+    Rend une liste (nom, est_dossier, taille), dossiers d'abord."""
+    out = []
+    for line in text.splitlines():
+        parts = line.rstrip("\r").rsplit(",", 2)
+        if len(parts) != 3:
+            continue                        # ligne de chemin '//' ou vide
+        name, typ, size = parts
+        if not name or name in (".", ".."):
+            continue
+        out.append((name, typ.strip() == "0", size.strip()))
+    out.sort(key=lambda e: (not e[1], e[0].lower()))
+    return out
+
+
 class Viewer:
     def __init__(self, root, link, font, zoom, want_dump):
         self.root, self.link, self.font = root, link, font
@@ -90,14 +109,31 @@ class Viewer:
         self.screen = CpcScreen(colour=True)
         self.queue = queue.Queue()
         self.dirty = True
+        self._closed = False
         self.tiles = {}             # cache (code, encre, papier) -> Image
         self.photo = None
+        self.host = link.sock.getpeername()[0]
+        self.m4 = M4(self.host)     # meme carte, API HTTP (port 80)
 
-        root.title("CPC — %s" % link.sock.getpeername()[0])
+        root.title("CPC — %s" % self.host)
         root.configure(bg="black")
+        root.geometry("%dx%d" % (160 * zoom, 120 * zoom))   # taille de depart
+        self._build_menu()
+        # Barre de statut en bas (empilee AVANT le canvas pour qu'elle garde
+        # sa place, le canvas prenant tout le reste).
+        self.status_msg = "connecte"
+        self.statusbar = tk.Label(root, anchor="w", bd=1, relief="sunken",
+                                  bg="#202020", fg="#d0d0d0", padx=6,
+                                  font=("Segoe UI", 9))
+        self.statusbar.pack(side="bottom", fill="x")
         self.canvas = tk.Canvas(root, highlightthickness=0, bg="black")
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.pack(side="top", fill="both", expand=True)
         root.bind("<Key>", self.on_key)
+        root.bind("<F5>", lambda e: self.do_dump())
+        # Redimensionnement : on marque juste "a redessiner" ; la boucle
+        # tick() redessine dans les 50 ms a la nouvelle taille (evite de
+        # recalculer l'image a chaque pixel pendant qu'on tire la fenetre).
+        self.canvas.bind("<Configure>", lambda e: setattr(self, "dirty", True))
 
         # Contrairement a la console, cette fenetre n'a aucun echo local :
         # c'est au CPC de nous renvoyer ce qu'on tape, sinon la frappe
@@ -113,6 +149,340 @@ class Viewer:
 
         threading.Thread(target=self.reader, daemon=True).start()
         self.tick()
+
+    # --- menus -----------------------------------------------------
+    def _build_menu(self):
+        bar = tk.Menu(self.root)
+        m = tk.Menu(bar, tearoff=0)
+        m.add_command(label="Relever l'ecran", command=self.do_dump,
+                      accelerator="F5")
+        m.add_command(label="Recharger la police du CPC", command=self.do_refont)
+        m.add_separator()
+        m.add_command(label="Quitter", command=self.root.destroy)
+        bar.add_cascade(label="Ecran", menu=m)
+        t = tk.Menu(bar, tearoff=0)
+        for z in (2, 3, 4, 5, 6):
+            t.add_command(label="x%d  (%dx%d)" % (z, 160 * z, 120 * z),
+                          command=lambda z=z: self.set_size(z))
+        bar.add_cascade(label="Taille", menu=t)
+
+        # --- carte M4 : les fonctions de l'interface web, via son API HTTP
+        m4 = tk.Menu(bar, tearoff=0)
+        m4.add_command(label="Navigateur de fichiers...", command=self.m4_browse)
+        m4.add_separator()
+        m4.add_command(label="Envoyer un fichier vers la SD...",
+                       command=self.m4_upload)
+        m4.add_command(label="Telecharger un fichier...", command=self.m4_download)
+        m4.add_command(label="Lancer un programme...", command=self.m4_run)
+        m4.add_command(label="Lister un dossier...", command=self.m4_ls)
+        m4.add_separator()
+        m4.add_command(label="Installer une ROM...", command=self.m4_rom_install)
+        m4.add_command(label="Supprimer une ROM...", command=self.m4_rom_delete)
+        m4.add_separator()
+        m4.add_command(label="Nouveau dossier...", command=self.m4_mkdir)
+        m4.add_command(label="Supprimer un fichier/dossier...", command=self.m4_rm)
+        m4.add_separator()
+        m4.add_command(label="Pause / reprise CPC", command=self.m4_pause)
+        m4.add_command(label="Reset CPC", command=self.m4_reset_cpc)
+        m4.add_command(label="Reset carte M4", command=self.m4_reset_m4)
+        bar.add_cascade(label="M4", menu=m4)
+        self.root.config(menu=bar)
+
+    # --- carte M4 (API HTTP) : operations en tache de fond -------------
+    def _m4_async(self, label, fn, on_ok=None):
+        """Lancer un appel M4 dans un thread (le reseau peut etre lent) et
+        rendre le resultat sur le thread tkinter (after) : succes -> barre de
+        statut, erreur -> pop-up (plus une trace dans la barre)."""
+        self.set_status(label + "...")
+
+        def done_ok(res):
+            if on_ok:
+                on_ok(res)
+            self.set_status(label + " : OK")
+
+        def done_err(e):
+            self.set_status(label + " : echec")
+            messagebox.showerror("M4", "%s : echec\n%s" % (label, e))
+
+        def worker():
+            try:
+                res = fn()
+            except Exception as e:            # reseau, HTTP, fichier...
+                self.root.after(0, lambda e=e: done_err(e))
+                return
+            self.root.after(0, lambda: done_ok(res))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def m4_upload(self):
+        local = filedialog.askopenfilename(title="Fichier a envoyer vers la SD")
+        if not local:
+            return
+        dest = simpledialog.askstring("Envoyer", "Dossier destination sur la SD :",
+                                      initialvalue="/", parent=self.root)
+        if dest is None:
+            return
+        self._m4_async("Envoi de %s" % os.path.basename(local),
+                       lambda: self.m4.upload(local, dest or "/"))
+
+    def m4_download(self):
+        remote = simpledialog.askstring("Telecharger",
+                                        "Fichier sur la SD (chemin CPC) :",
+                                        parent=self.root)
+        if not remote:
+            return
+        local = filedialog.asksaveasfilename(
+            title="Enregistrer sous", initialfile=os.path.basename(remote))
+        if not local:
+            return
+
+        def do():
+            data = self.m4.download(remote)
+            with open(local, "wb") as f:
+                f.write(data)
+            return len(data)
+        self._m4_async("Telechargement de %s" % remote, do)
+
+    def m4_run(self, name=None):
+        """Lancer un programme en INJECTANT RUN"..." dans le terminal, et non
+        via le run2 de la M4 : ce dernier fait un chargement bas-niveau qui
+        ecrase notre resident (terminal muet). Par le terminal, le programme
+        tourne sous BASIC, sa sortie est renvoyee, et la main revient au
+        terminal quand il se termine (pour ceux qui rendent la main)."""
+        if name is None:
+            name = simpledialog.askstring("Lancer",
+                                          "Programme a lancer (RUN\"...\") :",
+                                          parent=self.root)
+        if not name:
+            return
+        self.link.send(('RUN"%s"\r' % name).encode("latin-1", "replace"))
+        self.set_status('RUN"%s"' % name)
+
+    def m4_ls(self):
+        d = simpledialog.askstring("Lister", "Dossier de la SD a lister :",
+                                   initialvalue="/", parent=self.root)
+        if d is None:
+            return
+        self._m4_async("Listing de %s" % (d or "/"),
+                       lambda: self.m4.ls(d or "/"),
+                       lambda txt: self._show_text("SD : %s" % (d or "/"), txt))
+
+    def m4_rom_install(self):
+        local = filedialog.askopenfilename(
+            title="ROM a installer",
+            filetypes=[("ROM CPC", "*.rom *.ROM *.bin *.BIN"), ("Tous", "*.*")])
+        if not local:
+            return
+        slot = simpledialog.askinteger("Installer une ROM", "Numero de slot (0-31) :",
+                                       minvalue=0, maxvalue=31, parent=self.root)
+        if slot is None:
+            return
+        default = os.path.splitext(os.path.basename(local))[0][:16].upper()
+        name = simpledialog.askstring("Installer une ROM", "Nom de la ROM :",
+                                      initialvalue=default, parent=self.root)
+        if not name:
+            return
+        self._m4_async("Installation ROM slot %d" % slot,
+                       lambda: self.m4.rom_install(local, slot, name))
+
+    def m4_rom_delete(self):
+        slot = simpledialog.askinteger("Supprimer une ROM",
+                                       "Numero de slot a vider (0-31) :",
+                                       minvalue=0, maxvalue=31, parent=self.root)
+        if slot is None:
+            return
+        if messagebox.askyesno("Supprimer une ROM", "Vider le slot %d ?" % slot):
+            self._m4_async("Suppression ROM slot %d" % slot,
+                           lambda: self.m4.rom_delete(slot))
+
+    def m4_mkdir(self):
+        d = simpledialog.askstring("Nouveau dossier", "Chemin du dossier a creer :",
+                                   parent=self.root)
+        if d:
+            self._m4_async("Creation de %s" % d, lambda: self.m4.mkdir(d))
+
+    def m4_rm(self):
+        t = simpledialog.askstring("Supprimer",
+                                   "Fichier ou dossier (vide) a supprimer :",
+                                   parent=self.root)
+        if t and messagebox.askyesno("Supprimer", "Supprimer %s ?" % t):
+            self._m4_async("Suppression de %s" % t, lambda: self.m4.rm(t))
+
+    def m4_pause(self):
+        self._m4_async("Pause/reprise CPC", self.m4.pause)
+
+    def m4_reset_cpc(self):
+        if messagebox.askyesno("Reset CPC", "Redemarrer le CPC ?"):
+            self._m4_async("Reset CPC", self.m4.reset_cpc)
+
+    def m4_reset_m4(self):
+        if messagebox.askyesno(
+                "Reset carte M4",
+                "Redemarrer la carte M4 ?\n(la connexion du terminal sera coupee)"):
+            self._m4_async("Reset carte M4", self.m4.reset_m4)
+
+    def _show_text(self, title, text):
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.configure(bg="black")
+        txt = tk.Text(win, width=64, height=28, bg="#000080", fg="#ffff00",
+                      insertbackground="#ffff00", font=("Courier New", 10))
+        txt.pack(fill="both", expand=True)
+        txt.insert("1.0", text)
+        txt.config(state="disabled")
+
+    # --- navigateur de fichiers graphique de la SD --------------------
+    def m4_browse(self):
+        win = tk.Toplevel(self.root)
+        win.title("SD du CPC")
+        win.geometry("480x540")
+        win.configure(bg="#101010")
+        path = ["/"]                        # chemin courant (mutable -> closures)
+        rows = []                           # (nom, est_dossier, taille) affiches
+
+        lbl = tk.Label(win, anchor="w", bg="#101010", fg="#ffd000",
+                       font=("Segoe UI", 10, "bold"), padx=6, pady=3)
+        lbl.pack(fill="x")
+
+        frame = tk.Frame(win, bg="#101010")
+        frame.pack(fill="both", expand=True, padx=6)
+        sb = tk.Scrollbar(frame)
+        sb.pack(side="right", fill="y")
+        lst = tk.Listbox(frame, activestyle="none", font=("Consolas", 11),
+                         bg="#000030", fg="#e0e0e0", selectbackground="#1060c0",
+                         highlightthickness=0, yscrollcommand=sb.set)
+        lst.pack(side="left", fill="both", expand=True)
+        sb.config(command=lst.yview)
+
+        def join(base, name):
+            p = base.rstrip("/") + "/" + name
+            return "/" + "/".join(s for s in p.split("/") if s)
+
+        def refresh():
+            lbl.config(text="SD : " + path[0])
+            lst.delete(0, "end")
+            del rows[:]
+            try:
+                parsed = parse_dir(self.m4.ls(path[0]))
+            except Exception as e:
+                messagebox.showerror("SD", str(e), parent=win)
+                return
+            if path[0] != "/":
+                lst.insert("end", "[..]")
+                rows.append(("..", True, ""))
+            for name, is_dir, size in parsed:
+                if is_dir:
+                    lst.insert("end", "[ %s ]" % name)
+                else:
+                    lst.insert("end", "   %-22s %6s" % (name[:22], size))
+                rows.append((name, is_dir, size))
+            self.set_status("SD : %s (%d entrees)" % (path[0], len(parsed)))
+
+        def sel():
+            s = lst.curselection()
+            return rows[s[0]] if s else None
+
+        def enter(_=None):
+            e = sel()
+            if not e or not e[1]:
+                return
+            if e[0] == "..":
+                up = "/".join(path[0].strip("/").split("/")[:-1])
+                path[0] = "/" + up if up else "/"
+            else:
+                path[0] = join(path[0], e[0])
+            refresh()
+        lst.bind("<Double-Button-1>", enter)
+        lst.bind("<Return>", enter)
+
+        def do_upload():
+            local = filedialog.askopenfilename(parent=win,
+                                               title="Envoyer vers " + path[0])
+            if local:
+                self._m4_async("Envoi de %s" % os.path.basename(local),
+                               lambda: self.m4.upload(local, path[0]),
+                               lambda r: refresh())
+
+        def do_download():
+            e = sel()
+            if not e or e[1]:
+                return
+            local = filedialog.asksaveasfilename(parent=win, initialfile=e[0])
+            if not local:
+                return
+            remote = join(path[0], e[0])
+
+            def d():
+                data = self.m4.download(remote)
+                with open(local, "wb") as f:
+                    f.write(data)
+                return len(data)
+            self._m4_async("Telechargement de %s" % e[0], d)
+
+        def do_run():
+            e = sel()
+            if not e or e[1]:
+                return
+            name, folder = e[0], path[0]
+
+            def go():                       # placer le CPC dans le dossier, puis RUN
+                try:
+                    self.m4.cd_cpc(folder)
+                except Exception:
+                    pass
+                self.root.after(0, lambda: self.m4_run(name))
+            threading.Thread(target=go, daemon=True).start()
+
+        def do_delete():
+            e = sel()
+            if not e or e[0] == "..":
+                return
+            target = join(path[0], e[0])
+            if messagebox.askyesno("Supprimer", "Supprimer %s ?" % target,
+                                   parent=win):
+                self._m4_async("Suppression de %s" % e[0],
+                               lambda: self.m4.rm(target), lambda r: refresh())
+
+        def do_mkdir():
+            name = simpledialog.askstring("Nouveau dossier", "Nom du dossier :",
+                                          parent=win)
+            if name:
+                self._m4_async("Creation de %s" % name,
+                               lambda: self.m4.mkdir(join(path[0], name)),
+                               lambda r: refresh())
+
+        bar = tk.Frame(win, bg="#101010")
+        bar.pack(fill="x", padx=6, pady=6)
+        for text, cmd in (("Entrer", enter), ("Envoyer ici", do_upload),
+                          ("Telecharger", do_download), ("Lancer", do_run),
+                          ("Supprimer", do_delete), ("Nouv. dossier", do_mkdir),
+                          ("Actualiser", refresh)):
+            tk.Button(bar, text=text, command=cmd).pack(side="left", padx=2)
+        refresh()
+
+    def do_dump(self):
+        """Relever l'ecran actuel du CPC (comme --dump, a la demande)."""
+        self.link.send(CMD_DUMP)
+
+    def do_refont(self):
+        """Redemander le jeu de caracteres au CPC."""
+        self.screen.font = None         # force le re-enregistrement au retour
+        self.link.send(CMD_FONT)
+
+    def set_size(self, z):
+        self.root.geometry("%dx%d" % (160 * z, 120 * z))
+
+    # --- barre de statut -------------------------------------------
+    def _update_status(self):
+        mode = {20: "0", 40: "1", 80: "2"}.get(self.screen.width, "?")
+        etat = "deconnecte" if self._closed else "connecte"
+        self.statusbar.config(
+            text="%s : %s    MODE %s    L%02d C%02d    |    %s"
+            % (self.host, etat, mode, self.screen.row + 1, self.screen.col + 1,
+               self.status_msg))
+
+    def set_status(self, msg):
+        self.status_msg = msg
+        self._update_status()
 
     # --- reseau ----------------------------------------------------
     def reader(self):
@@ -178,12 +548,24 @@ class Viewer:
             if cc < len(rows[cr]):
                 code, pen, paper = rows[cr][cc]
             frame.paste(self.tile(code, paper, pen), (cc * CELL, cr * CELL))
-        # Etirement en 4:3 : les pixels du CPC ne sont pas carres.
-        out = frame.resize((160 * self.zoom, 120 * self.zoom), Image.NEAREST)
+        # Adapter a la fenetre : on etire l'image dans le plus grand
+        # rectangle 4:3 qui tient dans le canvas (les pixels du CPC ne sont
+        # pas carres -> proportions d'ecran 4:3), puis on centre (bandes
+        # noires si la fenetre n'est pas exactement au ratio). Les
+        # caracteres suivent donc la taille de la fenetre.
+        cw = self.canvas.winfo_width()
+        ch = self.canvas.winfo_height()
+        if cw < 8 or ch < 8:                        # fenetre pas encore mesuree
+            cw, ch = 160 * self.zoom, 120 * self.zoom
+        if cw * 3 >= ch * 4:                        # plus large que 4:3
+            dh, dw = ch, ch * 4 // 3
+        else:                                       # plus haut que 4:3
+            dw, dh = cw, cw * 3 // 4
+        out = frame.resize((max(dw, 1), max(dh, 1)), Image.NEAREST)
         self.photo = ImageTk.PhotoImage(out)
-        self.canvas.config(width=out.width, height=out.height)
         self.canvas.delete("all")
-        self.canvas.create_image(0, 0, anchor="nw", image=self.photo)
+        self.canvas.create_image(cw // 2, ch // 2, anchor="center",
+                                 image=self.photo)
 
     # --- boucle ----------------------------------------------------
     def tick(self):
@@ -207,8 +589,11 @@ class Viewer:
             self.dirty = False
             self.render()
         if closed:
+            self._closed = True
+            self.set_status("connexion fermee")
             self.root.title(self.root.title() + " — deconnecte")
             return
+        self._update_status()
         self.root.after(50, self.tick)
 
 
@@ -219,7 +604,8 @@ def main():
     p.add_argument("host", help="adresse IP du CPC")
     p.add_argument("port", nargs="?", type=int, default=6128)
     p.add_argument("--zoom", type=int, default=4,
-                   help="taille de la fenetre (defaut 4 = 640x480)")
+                   help="taille INITIALE de la fenetre (defaut 4 = 640x480) ; "
+                        "la fenetre est ensuite redimensionnable a la souris")
     p.add_argument("--refont", action="store_true",
                    help="redemander le jeu de caracteres au CPC")
     p.add_argument("--dump", action="store_true",

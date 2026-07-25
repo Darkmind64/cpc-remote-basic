@@ -124,6 +124,13 @@ launches are instant (`--refont` to fetch it again). This is the only client tha
 renders the block graphics and symbols correctly, since it draws the actual CPC
 matrices rather than mapping them to Unicode.
 
+The window is resizable (the characters scale with it, keeping 4:3), carries a
+status bar (IP, connection state, screen MODE, cursor position), and a full **M4
+menu** that reproduces the card's web interface over its HTTP API: a graphical
+**file browser** of the SD card (upload / download / delete / run / mkdir), ROM
+slot management, and CPC/M4 resets. `--dump` grabs the CPC's current screen on
+connect for a pixel-exact start.
+
 ### Character set
 
 The CPC is not Latin-1, and the French model follows ISO-646-FR: the accented
