@@ -106,7 +106,7 @@ class DialogHelper:
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
         """Input dialog — retourne la chaîne saisie ou None si annulé."""
-        dialog = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
         DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
@@ -142,7 +142,7 @@ class DialogHelper:
     @staticmethod
     def askyesno(title, message, parent=None):
         """Confirmation dialog — retourne True/False."""
-        dialog = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
         DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
@@ -173,7 +173,7 @@ class DialogHelper:
     @staticmethod
     def showerror(title, message, parent=None):
         """Error dialog."""
-        dialog = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
         DialogHelper._setup_dialog(dialog, parent, 400, 180)
 
@@ -194,7 +194,7 @@ class DialogHelper:
     @staticmethod
     def showwarning(title, message, parent=None):
         """Warning dialog."""
-        dialog = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
         DialogHelper._setup_dialog(dialog, parent, 400, 180)
 
@@ -215,7 +215,7 @@ class DialogHelper:
     @staticmethod
     def askinteger(title, prompt, parent=None, minvalue=0, maxvalue=9999):
         """Integer input dialog — retourne l'entier ou None si annulé."""
-        dialog = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
         DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
@@ -871,7 +871,7 @@ class Viewer:
 
     def m4_rom_manager(self):
         """Gestionnaire graphique des ROMs — interface propre et organisée."""
-        win = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        win = ctk.CTkToplevel(self.root)
         win.title("Gestionnaire ROMs — M4 Board")
         win.geometry("600x900")
         win.configure(fg_color="#1a1a1a")
@@ -1230,7 +1230,7 @@ class Viewer:
     def _browse_sd_path(self, title="Sélectionner un chemin", on_select=None):
         """Fenêtre graphique pour parcourir et sélectionner un chemin SD.
         Retourne le chemin sélectionné ou None si annulé."""
-        win = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        win = ctk.CTkToplevel(self.root)
         win.title(title)
         win.geometry("600x400")
         win.configure(fg_color="#1a1a1a")
@@ -1369,7 +1369,7 @@ class Viewer:
     def _show_text(self, title, text):
         """Afficher du texte dans une fenêtre modernisée avec customtkinter."""
         colors = self.get_theme_colors()
-        win = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        win = ctk.CTkToplevel(self.root)
         win.title(title)
         win.geometry("800x600")
         win.configure(fg_color=colors["bg"])
@@ -1402,7 +1402,7 @@ class Viewer:
         """Afficher les parametres de la M4 dans un panneau avec onglets.
         Recupere les valeurs actuelles via HTTP, affiche un formulaire, et
         permet de soumettre les modifications. Interface modernisée avec customtkinter."""
-        win = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        win = ctk.CTkToplevel(self.root)
         win.title("Parametres M4")
         win.geometry("700x550")
         win.configure(fg_color="#1a1a1a")
@@ -1560,7 +1560,7 @@ class Viewer:
 
     # --- navigateur de fichiers graphique de la SD (version modernisée) -----
     def m4_browse(self):
-        win = ctk.CTkToplevel()  # Pas de parent - pour éviter problèmes multi-écran
+        win = ctk.CTkToplevel(self.root)
         win.title("SD du CPC — M4 Board")
         win.geometry("600x600")
         win.configure(fg_color="#1a1a1a")
