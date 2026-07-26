@@ -1738,18 +1738,23 @@ def main():
     link = Link(args.host, args.port)
     root = tk.Tk()
 
-    # Appliquer la géométrie sauvegardée AVANT le mainloop
+    # Créer le Viewer AVANT d'appliquer la géométrie
+    # (la géométrie sera appliquée dans Viewer.__init__)
+    Viewer(root, link, font, zoom, args.dump)
+
+    # Appliquer la géométrie sauvegardée APRÈS le Viewer est créé
+    # Utiliser update_idletasks() pour s'assurer que Tkinter a initialisé la fenêtre
+    root.update_idletasks()
     saved_geometry = config.get("window_geometry")
     if saved_geometry:
         try:
             root.geometry(saved_geometry)
-        except tk.TclError:
-            # Si la géométrie est invalide, utiliser le zoom par défaut
+            print(f"✓ Géométrie restaurée: {saved_geometry}")
+        except tk.TclError as e:
+            print(f"Erreur géométrie: {e}")
             root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
     else:
         root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
-
-    Viewer(root, link, font, zoom, args.dump)
     try:
         root.mainloop()
     finally:
