@@ -704,19 +704,19 @@ class Viewer:
         config['_use_16_slots_param'] = 'rs16'
         config['_use_16_slots_cgi'] = 'checkbox4.cgi'
 
-        # Parser les ROMs (chercher les lignes "Rom slot N")
+        # Parser les ROMs (chercher les lignes <tr><td>Rom slot N</td><td><!--#romn-->NAME</td>)
         roms = {}
         for i in range(32):
             roms[i] = ""  # nom vide par défaut
 
-        # Chercher les noms dans le HTML (pattern: "Rom slot 3  TERM")
-        for match in re.finditer(r'Rom\s+slot\s+(\d+)\s*([^<\n]*)', html, re.IGNORECASE):
-            slot_str, name_part = match.groups()
+        # Chercher le pattern complet : <tr><td>Rom slot X</td><td><!--#romn-->ROMNAME</td>
+        for match in re.finditer(r'<tr><td>\s*Rom\s+slot\s+(\d+)\s*</td><td>\s*<!--#romn-->\s*([^<]*)\s*</td>', html, re.IGNORECASE):
+            slot_str, name = match.groups()
             try:
                 slot = int(slot_str.strip())
-                name = name_part.strip()
-                if name and slot < 32:
-                    roms[slot] = name
+                name = name.strip()
+                if slot < 32:
+                    roms[slot] = name  # Peut être vide string, c'est OK
             except (ValueError, AttributeError):
                 pass
 
