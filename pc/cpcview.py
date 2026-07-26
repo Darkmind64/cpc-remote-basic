@@ -45,6 +45,77 @@ ROWS = 25
 CELL = 8                        # un caractere CPC : 8 x 8 pixels
 
 
+class DialogHelper:
+    """Dialogs modernes avec customtkinter pour remplacer tkinter.simpledialog."""
+
+    @staticmethod
+    def askstring(title, prompt, parent=None, initialvalue=""):
+        """Input dialog — retourne la chaîne saisie ou None si annulé."""
+        dialog = ctk.CTkToplevel(parent)
+        dialog.title(title)
+        dialog.geometry("400x150")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        result = [None]
+
+        ctk.CTkLabel(dialog, text=prompt, text_color="#e0e0e0",
+                    font=("Segoe UI", 11)).pack(padx=15, pady=(15, 5))
+
+        entry = ctk.CTkEntry(dialog, fg_color="#2a2a2a", border_color="#404040",
+                            text_color="#e0e0e0", font=("Segoe UI", 11), width=300)
+        entry.pack(padx=15, pady=5)
+        entry.insert(0, initialvalue)
+
+        def ok():
+            result[0] = entry.get()
+            dialog.destroy()
+
+        def cancel():
+            dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ctk.CTkButton(btn_frame, text="OK", command=ok, width=80,
+                     fg_color="#1060c0", hover_color="#1a90ff").pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="Annuler", command=cancel, width=80,
+                     fg_color="#404040", hover_color="#606060").pack(side="left", padx=5)
+
+        dialog.wait_window()
+        return result[0]
+
+    @staticmethod
+    def askyesno(title, message, parent=None):
+        """Confirmation dialog — retourne True/False."""
+        dialog = ctk.CTkToplevel(parent)
+        dialog.title(title)
+        dialog.geometry("400x150")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        result = [False]
+
+        ctk.CTkLabel(dialog, text=message, text_color="#e0e0e0",
+                    font=("Segoe UI", 11), wraplength=350).pack(padx=15, pady=20)
+
+        def yes():
+            result[0] = True
+            dialog.destroy()
+
+        def no():
+            dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ctk.CTkButton(btn_frame, text="✓ Oui", command=yes, width=80,
+                     fg_color="#00aa00", hover_color="#00cc00").pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="✕ Non", command=no, width=80,
+                     fg_color="#aa0000", hover_color="#cc0000").pack(side="left", padx=5)
+
+        dialog.wait_window()
+        return result[0]
+
+
 class Link:
     """Connexion au CPC (le CPC est serveur sur 6128)."""
 
@@ -261,7 +332,7 @@ class Viewer:
         local = filedialog.askopenfilename(title="Fichier a envoyer vers la SD")
         if not local:
             return
-        dest = simpledialog.askstring("Envoyer", "Dossier destination sur la SD :",
+        dest = DialogHelper.askstring("Envoyer", "Dossier destination sur la SD :",
                                       initialvalue="/", parent=self.root)
         if dest is None:
             return
@@ -269,7 +340,7 @@ class Viewer:
                        lambda: self.m4.upload(local, dest or "/"))
 
     def m4_download(self):
-        remote = simpledialog.askstring("Telecharger",
+        remote = DialogHelper.askstring("Telecharger",
                                         "Fichier sur la SD (chemin CPC) :",
                                         parent=self.root)
         if not remote:
@@ -293,7 +364,7 @@ class Viewer:
         tourne sous BASIC, sa sortie est renvoyee, et la main revient au
         terminal quand il se termine (pour ceux qui rendent la main)."""
         if name is None:
-            name = simpledialog.askstring("Lancer",
+            name = DialogHelper.askstring("Lancer",
                                           "Programme a lancer (RUN\"...\") :",
                                           parent=self.root)
         if not name:
@@ -302,7 +373,7 @@ class Viewer:
         self.set_status('RUN"%s"' % name)
 
     def m4_ls(self):
-        d = simpledialog.askstring("Lister", "Dossier de la SD a lister :",
+        d = DialogHelper.askstring("Lister", "Dossier de la SD a lister :",
                                    initialvalue="/", parent=self.root)
         if d is None:
             return
@@ -321,7 +392,7 @@ class Viewer:
         if slot is None:
             return
         default = os.path.splitext(os.path.basename(local))[0][:16].upper()
-        name = simpledialog.askstring("Installer une ROM", "Nom de la ROM :",
+        name = DialogHelper.askstring("Installer une ROM", "Nom de la ROM :",
                                       initialvalue=default, parent=self.root)
         if not name:
             return
@@ -334,32 +405,32 @@ class Viewer:
                                        minvalue=0, maxvalue=31, parent=self.root)
         if slot is None:
             return
-        if messagebox.askyesno("Supprimer une ROM", "Vider le slot %d ?" % slot):
+        if DialogHelper.askyesno("Supprimer une ROM", "Vider le slot %d ?" % slot):
             self._m4_async("Suppression ROM slot %d" % slot,
                            lambda: self.m4.rom_delete(slot))
 
     def m4_mkdir(self):
-        d = simpledialog.askstring("Nouveau dossier", "Chemin du dossier a creer :",
+        d = DialogHelper.askstring("Nouveau dossier", "Chemin du dossier a creer :",
                                    parent=self.root)
         if d:
             self._m4_async("Creation de %s" % d, lambda: self.m4.mkdir(d))
 
     def m4_rm(self):
-        t = simpledialog.askstring("Supprimer",
+        t = DialogHelper.askstring("Supprimer",
                                    "Fichier ou dossier (vide) a supprimer :",
                                    parent=self.root)
-        if t and messagebox.askyesno("Supprimer", "Supprimer %s ?" % t):
+        if t and DialogHelper.askyesno("Supprimer", "Supprimer %s ?" % t):
             self._m4_async("Suppression de %s" % t, lambda: self.m4.rm(t))
 
     def m4_pause(self):
         self._m4_async("Pause/reprise CPC", self.m4.pause)
 
     def m4_reset_cpc(self):
-        if messagebox.askyesno("Reset CPC", "Redemarrer le CPC ?"):
+        if DialogHelper.askyesno("Reset CPC", "Redemarrer le CPC ?"):
             self._m4_async("Reset CPC", self.m4.reset_cpc)
 
     def m4_reset_m4(self):
-        if messagebox.askyesno(
+        if DialogHelper.askyesno(
                 "Reset carte M4",
                 "Redemarrer la carte M4 ?\n(la connexion du terminal sera coupee)"):
             self._m4_async("Reset carte M4", self.m4.reset_m4)
@@ -661,13 +732,13 @@ class Viewer:
             if not e or e[0] == "..":
                 return
             target = join(path[0], e[0])
-            if messagebox.askyesno("Supprimer", "Supprimer %s ?" % target,
+            if DialogHelper.askyesno("Supprimer", "Supprimer %s ?" % target,
                                    parent=win):
                 self._m4_async("Suppression de %s" % e[0],
                                lambda: self.m4.rm(target), lambda r: refresh())
 
         def do_mkdir():
-            name = simpledialog.askstring("Nouveau dossier", "Nom du dossier :",
+            name = DialogHelper.askstring("Nouveau dossier", "Nom du dossier :",
                                           parent=win)
             if name:
                 self._m4_async("Creation de %s" % name,
