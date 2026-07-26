@@ -188,27 +188,19 @@ class CTkListbox(ctk.CTkFrame):
         self._double_click_callback = None
         self._return_callback = None
 
-        # Scrollable frame avec items
-        self.canvas = tk.Canvas(self, bg="#000030", highlightthickness=0)
-        self.canvas.pack(side="left", fill="both", expand=True)
-
-        self.scrollbar = tk.Scrollbar(self, command=self.canvas.yview)
-        self.scrollbar.pack(side="right", fill="y")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.scrollable_frame = ctk.CTkFrame(self.canvas, fg_color="#000030")
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
+        # Scrollable container
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#000030")
+        self.scroll_frame.pack(fill="both", expand=True)
 
         self.item_widgets = []
+        self.item_labels = []
 
     def insert(self, index, text):
         """Ajouter un item à la liste."""
-        self.items.insert(index if index != "end" else len(self.items), text)
+        if index == "end":
+            self.items.append(text)
+        else:
+            self.items.insert(index, text)
         self._refresh_display()
 
     def delete(self, start, end=None):
@@ -220,8 +212,8 @@ class CTkListbox(ctk.CTkFrame):
         self._refresh_display()
 
     def curselection(self):
-        """Retourner la sélection actuelle."""
-        return self.selection
+        """Retourner la sélection actuelle (tuple)."""
+        return tuple(self.selection)
 
     def bind(self, sequence, callback):
         """Binder les événements."""
@@ -235,11 +227,12 @@ class CTkListbox(ctk.CTkFrame):
         for widget in self.item_widgets:
             widget.destroy()
         self.item_widgets = []
+        self.item_labels = []
         self.selection = []
 
         for idx, text in enumerate(self.items):
-            item_frame = ctk.CTkFrame(self.scrollable_frame, fg_color="#000030",
-                                      hover_color="#1060c0")
+            item_frame = ctk.CTkFrame(self.scroll_frame, fg_color="#000030",
+                                      cursor="hand2")
             item_frame.pack(fill="x", padx=0, pady=0)
 
             label = ctk.CTkLabel(item_frame, text=text, text_color="#e0e0e0",
@@ -255,6 +248,7 @@ class CTkListbox(ctk.CTkFrame):
             def make_dbl_click_handler(i):
                 def on_dbl_click(e):
                     self.selection = [i]
+                    self._refresh_highlight()
                     if self._double_click_callback:
                         self._double_click_callback(None)
                 return on_dbl_click
@@ -265,6 +259,7 @@ class CTkListbox(ctk.CTkFrame):
             item_frame.bind("<Double-Button-1>", make_dbl_click_handler(idx))
 
             self.item_widgets.append(item_frame)
+            self.item_labels.append(label)
 
         self._refresh_highlight()
 
