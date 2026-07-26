@@ -31,7 +31,7 @@ import socket
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from tkinter import filedialog, ttk
 
 from PIL import Image, ImageTk
 
@@ -114,6 +114,94 @@ class DialogHelper:
                      font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
         ctk.CTkButton(btn_frame, text="✕ Non", command=no, width=90,
                      fg_color="#aa0000", hover_color="#cc0000",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+
+        dialog.wait_window()
+        return result[0]
+
+    @staticmethod
+    def showerror(title, message, parent=None):
+        """Error dialog."""
+        dialog = ctk.CTkToplevel(parent)
+        dialog.title(title)
+        dialog.geometry("400x180")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        ctk.CTkLabel(dialog, text=message, text_color="#ff6060",
+                    font=("Segoe UI", 11), wraplength=350).pack(padx=15, pady=20)
+
+        def ok():
+            dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ctk.CTkButton(btn_frame, text="✓ OK", command=ok, width=90,
+                     fg_color="#aa0000", hover_color="#cc0000",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+
+        dialog.wait_window()
+
+    @staticmethod
+    def showwarning(title, message, parent=None):
+        """Warning dialog."""
+        dialog = ctk.CTkToplevel(parent)
+        dialog.title(title)
+        dialog.geometry("400x180")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        ctk.CTkLabel(dialog, text=message, text_color="#ffaa00",
+                    font=("Segoe UI", 11), wraplength=350).pack(padx=15, pady=20)
+
+        def ok():
+            dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ctk.CTkButton(btn_frame, text="✓ OK", command=ok, width=90,
+                     fg_color="#ff8800", hover_color="#ffaa00",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+
+        dialog.wait_window()
+
+    @staticmethod
+    def askinteger(title, prompt, parent=None, minvalue=0, maxvalue=9999):
+        """Integer input dialog — retourne l'entier ou None si annulé."""
+        dialog = ctk.CTkToplevel(parent)
+        dialog.title(title)
+        dialog.geometry("400x150")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        result = [None]
+
+        ctk.CTkLabel(dialog, text=prompt, text_color="#e0e0e0",
+                    font=("Segoe UI", 11)).pack(padx=15, pady=(15, 5))
+
+        entry = ctk.CTkEntry(dialog, fg_color="#2a2a2a", border_color="#404040",
+                            text_color="#e0e0e0", font=("Segoe UI", 11), width=300)
+        entry.pack(padx=15, pady=5)
+
+        def ok():
+            try:
+                val = int(entry.get())
+                if minvalue <= val <= maxvalue:
+                    result[0] = val
+                    dialog.destroy()
+            except ValueError:
+                pass
+
+        def cancel():
+            dialog.destroy()
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+        ctk.CTkButton(btn_frame, text="✓ OK", command=ok, width=90,
+                     fg_color="#1060c0", hover_color="#1a90ff",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+        ctk.CTkButton(btn_frame, text="✕ Annuler", command=cancel, width=90,
+                     fg_color="#404040", hover_color="#606060",
                      font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
 
         dialog.wait_window()
@@ -415,7 +503,7 @@ class Viewer:
 
         def done_err(e):
             self.set_status(label + " : echec")
-            messagebox.showerror("M4", "%s : echec\n%s" % (label, e))
+            DialogHelper.showerror("M4", "%s : echec\n%s" % (label, e))
 
         def worker():
             try:
@@ -485,7 +573,7 @@ class Viewer:
             filetypes=[("ROM CPC", "*.rom *.ROM *.bin *.BIN"), ("Tous", "*.*")])
         if not local:
             return
-        slot = simpledialog.askinteger("Installer une ROM", "Numero de slot (0-31) :",
+        slot = DialogHelper.askinteger("Installer une ROM", "Numero de slot (0-31) :",
                                        minvalue=0, maxvalue=31, parent=self.root)
         if slot is None:
             return
@@ -498,7 +586,7 @@ class Viewer:
                        lambda: self.m4.rom_install(local, slot, name))
 
     def m4_rom_delete(self):
-        slot = simpledialog.askinteger("Supprimer une ROM",
+        slot = DialogHelper.askinteger("Supprimer une ROM",
                                        "Numero de slot a vider (0-31) :",
                                        minvalue=0, maxvalue=31, parent=self.root)
         if slot is None:
@@ -752,7 +840,7 @@ class Viewer:
             try:
                 parsed = parse_dir(self.m4.ls(path[0]))
             except Exception as e:
-                messagebox.showerror("SD", str(e), parent=win)
+                DialogHelper.showerror("SD", str(e), parent=win)
                 return
             if path[0] != "/":
                 lst.insert("end", "[..]")
@@ -910,7 +998,7 @@ class Viewer:
         try:
             text = self.root.clipboard_get()
         except tk.TclError:
-            messagebox.showwarning("Coller", "Presse-papiers vide ou inaccessible")
+            DialogHelper.showwarning("Coller", "Presse-papiers vide ou inaccessible")
             return
 
         # Normaliser et decouper par lignes
