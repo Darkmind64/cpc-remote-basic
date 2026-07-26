@@ -428,7 +428,7 @@ class Viewer:
 
         root.title("CPC — %s" % self.host)
         root.configure(bg="black")
-        root.geometry("%dx%d" % (160 * zoom, 120 * zoom))   # taille de depart
+        # NOTE: géométrie appliquée par main() pour respecter la config sauvegardée
 
         # Sauvegarder la géométrie/zoom à la fermeture
         def on_closing():
@@ -1703,8 +1703,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("host", help="adresse IP du CPC")
     p.add_argument("port", nargs="?", type=int, default=6128)
-    p.add_argument("--zoom", type=int, default=4,
-                   help="taille INITIALE de la fenetre (defaut 4 = 640x480) ; "
+    p.add_argument("--zoom", type=int, default=None,
+                   help="taille INITIALE de la fenetre (defaut: utilise config, ou 4) ; "
                         "la fenetre est ensuite redimensionnable a la souris")
     p.add_argument("--refont", action="store_true",
                    help="redemander le jeu de caracteres au CPC")
@@ -1713,13 +1713,34 @@ def main():
                         "exact ; sans, l'ecran se reconstruit au fil de la sortie)")
     args = p.parse_args()
 
+    # Charger la config AVANT de créer la fenêtre
+    config = ConfigManager.load()
+
+    # Déterminer le zoom : argument CLI > config > défaut
+    if args.zoom is not None:
+        zoom = args.zoom
+    else:
+        zoom = config.get("zoom", 4)
+
     font = None if args.refont else load_font()
     if font is None:
         print("Jeu de caracteres absent du cache : demande au CPC (2 Ko)...")
 
     link = Link(args.host, args.port)
     root = tk.Tk()
-    Viewer(root, link, font, args.zoom, args.dump)
+
+    # Appliquer la géométrie sauvegardée AVANT le mainloop
+    saved_geometry = config.get("window_geometry")
+    if saved_geometry:
+        try:
+            root.geometry(saved_geometry)
+        except tk.TclError:
+            # Si la géométrie est invalide, utiliser le zoom par défaut
+            root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
+    else:
+        root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
+
+    Viewer(root, link, font, zoom, args.dump)
     try:
         root.mainloop()
     finally:
