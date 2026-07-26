@@ -526,7 +526,7 @@ class Viewer:
             return "/" + "/".join(s for s in p.split("/") if s)
 
         def refresh():
-            lbl.config(text="SD : " + path[0])
+            lbl.configure(text="SD : " + path[0])
             lst.delete(0, "end")
             del rows[:]
             try:
