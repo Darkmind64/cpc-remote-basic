@@ -853,10 +853,10 @@ class Viewer:
         return result
 
     def m4_rom_manager(self):
-        """Gestionnaire graphique des ROMs — interface inspirée du web (roms.shtml)."""
+        """Gestionnaire graphique des ROMs — interface propre et organisée."""
         win = ctk.CTkToplevel(self.root)
         win.title("Gestionnaire ROMs — M4 Board")
-        win.geometry("1000x700")
+        win.geometry("900x750")
         win.configure(fg_color="#1a1a1a")
 
         config = {}
@@ -867,24 +867,32 @@ class Viewer:
                                 text_color="#ffff00", font=("Segoe UI", 14, "bold"))
         title_lbl.pack(pady=10)
 
-        # === ESPACE DISQUE SD ===
-        space_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
-        space_frame.pack(fill="x", padx=15, pady=(0, 10))
+        # Scrollable frame pour tout le contenu
+        scroll_frame = ctk.CTkScrollableFrame(win, fg_color="#1a1a1a")
+        scroll_frame.pack(fill="both", expand=True, padx=0, pady=0)
+
+        # === 1. ESPACE DISQUE SD ===
+        space_frame = ctk.CTkFrame(scroll_frame, fg_color="#2a2a2a", corner_radius=6)
+        space_frame.pack(fill="x", padx=15, pady=(0, 15))
 
         space_info_lbl = ctk.CTkLabel(space_frame, text="💾 SD Card Space: --",
-                                     text_color="#ffff00", font=("Segoe UI", 10))
-        space_info_lbl.pack(side="left", padx=10, pady=5)
+                                     text_color="#ffff00", font=("Segoe UI", 10, "bold"))
+        space_info_lbl.pack(side="left", padx=12, pady=8)
 
         space_progress = ctk.CTkProgressBar(space_frame, fg_color="#1a1a1a",
                                            progress_color="#00aa00", width=300)
         space_progress.set(0.5)
-        space_progress.pack(side="left", padx=10, pady=5, fill="x", expand=True)
+        space_progress.pack(side="left", padx=12, pady=8, fill="x", expand=True)
 
-        # === CONFIG SECTION (scrollable) ===
-        config_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        # === 2. CONFIGURATION M4 ===
+        config_lbl = ctk.CTkLabel(scroll_frame, text="⚙️ Configuration M4",
+                                 text_color="#ffff00", font=("Segoe UI", 11, "bold"))
+        config_lbl.pack(pady=(15, 8), padx=15, anchor="w")
+
+        config_frame = ctk.CTkFrame(scroll_frame, fg_color="#2a2a2a", corner_radius=6)
         config_frame.pack(fill="x", padx=15, pady=(0, 15))
 
-        # Grille des paramètres de config
+        # Paramètres de config
         params = [
             ("Enabled", "enabled"),
             ("Rom number", "rom_number"),
@@ -894,7 +902,7 @@ class Viewer:
             ("Use only 16 slots", "use_16_slots"),
         ]
 
-        config_widgets = {}  # key -> widget pour update
+        config_widgets = {}
 
         for row, (label_text, key) in enumerate(params):
             lbl = ctk.CTkLabel(config_frame, text=label_text, text_color="#ffffff",
@@ -902,29 +910,24 @@ class Viewer:
             lbl.grid(row=row, column=0, sticky="w", padx=10, pady=5)
 
             if "Enabled" in label_text or "only" in label_text:
-                # Checkbox
                 var = tk.BooleanVar()
                 chk = ctk.CTkCheckBox(config_frame, text="", variable=var,
                                      fg_color="#1060c0", hover_color="#1a90ff")
                 chk.grid(row=row, column=1, sticky="w", padx=10, pady=5)
                 config_widgets[key] = (chk, var, "bool")
             else:
-                # Input field
                 entry = ctk.CTkEntry(config_frame, fg_color="#000030", border_color="#404040",
                                     text_color="#ffff00", font=("Consolas", 10), width=150)
                 entry.grid(row=row, column=1, sticky="w", padx=10, pady=5)
                 config_widgets[key] = (entry, entry, "text")
 
-            # Set button
             def make_set_handler(k, widget_info):
                 def h():
                     widget, var, typ = widget_info
-                    # Récupérer la valeur depuis le widget
                     if typ == "bool":
                         value = var.get()
                         param_name = config.get(f'_{k}_param')
                         cgi_name = config.get(f'_{k}_cgi')
-                        # Pour les checkboxes, envoyer "on" si coché, sinon rien
                         if value:
                             self._m4_async(f"Modification {k}",
                                           lambda: self.m4._get(cgi_name, **{param_name: "on"}),
@@ -949,50 +952,53 @@ class Viewer:
                                hover_color="#1a90ff")
             btn.grid(row=row, column=2, padx=10, pady=5)
 
-        # === ROM BOARD SECTION ===
-        board_lbl = ctk.CTkLabel(win, text="📋 Rom board",
-                                text_color="#ffff00", font=("Segoe UI", 12, "bold"))
-        board_lbl.pack(pady=(10, 5))
+        # === 3. ROM BOARD ===
+        board_lbl = ctk.CTkLabel(scroll_frame, text="📋 Rom board (32 slots)",
+                                text_color="#ffff00", font=("Segoe UI", 11, "bold"))
+        board_lbl.pack(pady=(15, 8), padx=15, anchor="w")
 
-        # Scrollable list de ROMs
-        board_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
-        board_frame.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        board_grid = ctk.CTkFrame(scroll_frame, fg_color="#1a1a1a")
+        board_grid.pack(fill="x", padx=15, pady=(0, 15))
 
-        rom_display_frame = ctk.CTkScrollableFrame(board_frame, fg_color="#000030")
-        rom_display_frame.pack(fill="both", expand=True)
+        for col in range(4):
+            board_grid.columnconfigure(col, weight=1)
 
-        rom_widgets = {}  # slot -> (label_name_widget, remove_btn, upload_btn)
+        rom_widgets = {}
+        rom_display_grid = []
 
         def update_rom_display():
-            """Rafraîchir l'affichage des ROMs."""
-            # Nettoyer
-            for widget in rom_display_frame.winfo_children():
+            """Rafraîchir l'affichage compact des ROMs."""
+            for widget in rom_display_grid:
                 widget.destroy()
+            rom_display_grid.clear()
             rom_widgets.clear()
 
-            # Afficher chaque slot
             for slot in range(32):
-                slot_frame = ctk.CTkFrame(rom_display_frame, fg_color="#1a1a1a",
-                                         corner_radius=3)
-                slot_frame.pack(fill="x", pady=2)
-
+                row, col = divmod(slot, 4)
                 rom_name = roms.get(slot, "")
 
-                # Slot label + name
-                info_text = f"Rom slot {slot:2d}"
-                if rom_name:
-                    info_text += f"  {rom_name}"
+                slot_frame = ctk.CTkFrame(board_grid, fg_color="#0d2a0d" if rom_name else "#1a1a1a",
+                                         corner_radius=3, border_width=1,
+                                         border_color="#00aa00" if rom_name else "#333333")
+                slot_frame.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
 
-                info_lbl = ctk.CTkLabel(slot_frame, text=info_text,
-                                       text_color="#ffff00" if rom_name else "#888888",
-                                       font=("Consolas", 10), anchor="w")
-                info_lbl.pack(side="left", padx=10, pady=4, fill="x", expand=True)
+                slot_lbl = ctk.CTkLabel(slot_frame, text=f"{slot:02d}",
+                                       text_color="#ffaa00", font=("Segoe UI", 8, "bold"))
+                slot_lbl.pack(pady=(2, 0), padx=1)
 
-                # Boutons Remove et Upload
+                name_text = rom_name[:8] if rom_name else "---"
+                name_lbl = ctk.CTkLabel(slot_frame, text=name_text,
+                                       text_color="#ffff00" if rom_name else "#666666",
+                                       font=("Consolas", 7), wraplength=60,
+                                       justify="center")
+                name_lbl.pack(pady=(0, 2), padx=1, fill="x")
+
+                btn_frame = ctk.CTkFrame(slot_frame, fg_color="#1a1a1a")
+                btn_frame.pack(fill="x", padx=1, pady=(1, 2))
+
                 def make_remove_handler(s):
                     def h():
-                        if DialogHelper.askyesno("Supprimer ROM",
-                                                f"Vider le slot {s} ?", parent=win):
+                        if DialogHelper.askyesno("Supprimer ROM", f"Vider le slot {s} ?", parent=win):
                             self._m4_async(f"Suppression ROM slot {s}",
                                           lambda: self.m4.rom_delete(s),
                                           lambda r: refresh_all())
@@ -1001,7 +1007,7 @@ class Viewer:
                 def make_upload_handler(s):
                     def h():
                         local = filedialog.askopenfilename(
-                            parent=win, title="ROM a charger",
+                            parent=win, title="ROM à charger",
                             filetypes=[("ROM", "*.rom *.bin"), ("All", "*.*")])
                         if not local:
                             return
@@ -1014,30 +1020,147 @@ class Viewer:
                                           lambda r: refresh_all())
                     return h
 
-                remove_btn = ctk.CTkButton(slot_frame, text="🗑️ Remove", width=80,
-                                          command=make_remove_handler(slot),
-                                          font=("Segoe UI", 9),
-                                          fg_color="#aa0000", hover_color="#cc0000")
-                remove_btn.pack(side="right", padx=3, pady=4)
+                ctk.CTkButton(btn_frame, text="📥", width=20, height=16,
+                             command=make_upload_handler(slot),
+                             font=("Segoe UI", 7),
+                             fg_color="#0060aa", hover_color="#1a90ff", corner_radius=2).pack(side="left", padx=0)
 
-                upload_btn = ctk.CTkButton(slot_frame, text="📥 Upload", width=80,
-                                          command=make_upload_handler(slot),
-                                          font=("Segoe UI", 9),
-                                          fg_color="#0060aa", hover_color="#1a90ff")
-                upload_btn.pack(side="right", padx=3, pady=4)
+                ctk.CTkButton(btn_frame, text="🗑️", width=20, height=16,
+                             command=make_remove_handler(slot),
+                             font=("Segoe UI", 7),
+                             fg_color="#aa0000", hover_color="#cc0000", corner_radius=2).pack(side="left", padx=0)
 
-                rom_widgets[slot] = (info_lbl, remove_btn, upload_btn)
+                rom_display_grid.append(slot_frame)
 
+        # === 4. CARTES (Ajouter ROMs + Presets) ===
+        cards_frame = ctk.CTkFrame(scroll_frame, fg_color="#1a1a1a")
+        cards_frame.pack(fill="both", expand=False, padx=15, pady=15)
+
+        # Ajouter ROMs
+        upload_frame = ctk.CTkFrame(cards_frame, fg_color="#0d2d0d", corner_radius=12,
+                                    border_width=2, border_color="#00cc00")
+        upload_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        ctk.CTkLabel(upload_frame, text="📥 Ajouter ROMs",
+                    text_color="#00ff00", font=("Segoe UI", 12, "bold")).pack(pady=(15, 5))
+        ctk.CTkLabel(upload_frame, text="Installer plusieurs ROMs",
+                    text_color="#88ff88", font=("Segoe UI", 9)).pack(pady=(0, 12))
+
+        def upload_roms():
+            rom_files = filedialog.askopenfilenames(
+                title="Sélectionner ROMs", filetypes=[("ROM files", "*.rom *.bin"), ("Tous", "*.*")])
+            if not rom_files:
+                return
+            roms_copy = roms.copy()
+            upload_list = []
+            for rom_file in rom_files:
+                slot = None
+                for i in range(32):
+                    if not roms_copy.get(i, ""):
+                        slot = i
+                        roms_copy[i] = os.path.basename(rom_file)
+                        break
+                if slot is None:
+                    DialogHelper.showwarning("Upload ROMs",
+                                           f"{os.path.basename(rom_file)}: Pas de slot vide",
+                                           parent=win)
+                    continue
+                default_name = os.path.splitext(os.path.basename(rom_file))[0][:16].upper()
+                name = DialogHelper.askstring("ROM Name",
+                                            f"Slot {slot}: Nom pour {os.path.basename(rom_file)}",
+                                            initialvalue=default_name, parent=win)
+                if name:
+                    upload_list.append((rom_file, slot, name))
+
+            def upload_sequence(idx=0):
+                if idx >= len(upload_list):
+                    refresh_all()
+                    self.set_status(f"Installation de {len(upload_list)} ROM(s) terminée")
+                    return
+                rom_file, slot, name = upload_list[idx]
+                def on_ok(res):
+                    self.root.after(1000, lambda: upload_sequence(idx + 1))
+                self._m4_async(f"Installation ROM slot {slot}",
+                             lambda: self.m4.rom_install(rom_file, slot, name),
+                             on_ok)
+            if upload_list:
+                upload_sequence()
+
+        ctk.CTkButton(upload_frame, text="📂 Sélectionner ROMs...",
+                     command=upload_roms, fg_color="#00dd00",
+                     hover_color="#00ff00", font=("Segoe UI", 11, "bold"),
+                     text_color="#000000", corner_radius=8, height=38).pack(fill="x", padx=12, pady=(0, 12))
+
+        # Presets
+        preset_frame = ctk.CTkFrame(cards_frame, fg_color="#0d1a2d", corner_radius=12,
+                                    border_width=2, border_color="#0088ff")
+        preset_frame.pack(side="left", fill="both", expand=True)
+
+        ctk.CTkLabel(preset_frame, text="💾 Presets",
+                    text_color="#00ccff", font=("Segoe UI", 12, "bold")).pack(pady=(15, 5))
+        ctk.CTkLabel(preset_frame, text="Sauvegarder/charger configs",
+                    text_color="#88ccff", font=("Segoe UI", 9)).pack(pady=(0, 12))
+
+        preset_input = ctk.CTkFrame(preset_frame, fg_color="#0d1a2d")
+        preset_input.pack(fill="x", padx=12, pady=(0, 10))
+
+        preset_name_entry = ctk.CTkEntry(preset_input, placeholder_text="Nom du preset",
+                                        fg_color="#000020", border_color="#0088ff",
+                                        text_color="#00ffff", font=("Segoe UI", 10), height=36)
+        preset_name_entry.pack(side="left", padx=(0, 8), fill="both", expand=True)
+
+        def save_preset():
+            name = preset_name_entry.get().strip()
+            if not name:
+                DialogHelper.showwarning("Preset", "Entrez un nom", parent=win)
+                return
+            self._save_rom_preset(name)
+            preset_name_entry.delete(0, "end")
+            update_preset_buttons()
+
+        ctk.CTkButton(preset_input, text="💾 Save", command=save_preset,
+                     fg_color="#0088ff", hover_color="#00aaff", text_color="#ffffff",
+                     font=("Segoe UI", 11, "bold"), corner_radius=8, width=65, height=36).pack(side="left")
+
+        presets_list = ctk.CTkFrame(preset_frame, fg_color="#0d1a2d")
+        presets_list.pack(fill="x", padx=12, pady=(0, 12))
+
+        def update_preset_buttons():
+            for w in presets_list.winfo_children():
+                w.destroy()
+            if not self.rom_presets:
+                ctk.CTkLabel(presets_list, text="(aucun)", text_color="#666666", font=("Segoe UI", 9)).pack(pady=3)
+            else:
+                for pname in sorted(self.rom_presets.keys()):
+                    f = ctk.CTkFrame(presets_list, fg_color="#0d1a2d")
+                    f.pack(side="left", padx=2, pady=2)
+                    ctk.CTkButton(f, text=f"📂 {pname}",
+                                 command=lambda n=pname: self._load_rom_preset(n),
+                                 fg_color="#004488", hover_color="#0066aa",
+                                 font=("Segoe UI", 9), width=95, corner_radius=5, height=28).pack(side="left")
+                    ctk.CTkButton(f, text="✕",
+                                 command=lambda n=pname: delete_preset(n),
+                                 fg_color="#664444", hover_color="#aa6666",
+                                 font=("Segoe UI", 9, "bold"), width=25, corner_radius=5, height=28).pack(side="left", padx=2)
+
+        def delete_preset(name):
+            if name in self.rom_presets:
+                del self.rom_presets[name]
+                self.config["rom_presets"] = self.rom_presets
+                ConfigManager.save(self.config)
+                update_preset_buttons()
+                self.set_status(f"Preset '{name}' supprimé")
+
+        update_preset_buttons()
+
+        # === 5. REFRESH FUNCTION ===
         def refresh_all():
-            """Charger les données depuis la M4."""
             def load():
                 nonlocal config, roms
                 config, roms = self._fetch_m4_roms()
-                space_data = [self._get_sd_space()]  # Retourner dans une liste pour nonlocal
-                return space_data[0]
+                return self._get_sd_space()
 
             def update_ui(space_info):
-                # Mettre à jour les champs de config
                 for key, (widget, var, typ) in config_widgets.items():
                     val = config.get(key, "")
                     if typ == "bool":
@@ -1046,39 +1169,28 @@ class Viewer:
                         widget.delete(0, "end")
                         widget.insert(0, str(val))
 
-                # Mettre à jour l'affichage de l'espace disque
                 if space_info:
                     used_kb, total_kb = space_info
                     if total_kb > 0:
                         percent = used_kb / total_kb
                         space_progress.set(percent)
-                        # Couleur : vert < 70%, orange 70-90%, rouge > 90%
-                        if percent < 0.7:
-                            color = "#00aa00"
-                        elif percent < 0.9:
-                            color = "#ffaa00"
-                        else:
-                            color = "#aa0000"
+                        color = "#00aa00" if percent < 0.7 else "#ffaa00" if percent < 0.9 else "#aa0000"
                         space_progress.configure(progress_color=color)
-                        used_mb = used_kb / 1024
-                        total_mb = total_kb / 1024
+                        used_mb, total_mb = used_kb / 1024, total_kb / 1024
                         space_info_lbl.configure(
-                            text=f"💾 SD: {used_mb:.1f} MB / {total_mb:.1f} MB ({percent*100:.1f}%)")
+                            text=f"💾 SD: {used_mb:.1f}/{total_mb:.1f} MB ({percent*100:.1f}%)")
 
-                # Mettre à jour l'affichage des ROMs
                 update_rom_display()
                 self.set_status("ROMs et espace disque chargés")
 
-            self._m4_async("Lecture des ROMs et espace SD", load, update_ui)
+            self._m4_async("Lecture M4", load, update_ui)
 
-        # Charger au démarrage
         refresh_all()
 
-        # Bouton Rafraîchir
-        refresh_btn = ctk.CTkButton(win, text="🔄 Rafraîchir", command=refresh_all,
-                                   font=("Segoe UI", 10), fg_color="#00aa00",
-                                   hover_color="#00cc00")
-        refresh_btn.pack(pady=10)
+        # === BOUTON REFRESH ===
+        ctk.CTkButton(win, text="🔄 Rafraîchir", command=refresh_all,
+                     font=("Segoe UI", 10), fg_color="#00aa00",
+                     hover_color="#00cc00").pack(pady=10)
 
     def _browse_sd_path(self, title="Sélectionner un chemin", on_select=None):
         """Fenêtre graphique pour parcourir et sélectionner un chemin SD.
