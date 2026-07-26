@@ -391,6 +391,8 @@ class Viewer:
                      **btn_style).pack(side="left", padx=3, pady=6)
         ctk.CTkButton(toolbar, text="⚙️ Param", command=self.m4_settings,
                      **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="💿 ROMs", command=self.m4_rom_manager,
+                     **btn_style).pack(side="left", padx=3, pady=6)
         ctk.CTkButton(toolbar, text="▶️ Lancer", command=self.m4_run_dialog,
                      **btn_style).pack(side="left", padx=3, pady=6)
         ctk.CTkButton(toolbar, text="⏸ Pause", command=self.m4_pause,
@@ -513,10 +515,7 @@ class Viewer:
         m4_config = tk.Menu(m4, tearoff=0)
         m4_config.add_command(label="Parametres M4...", command=self.m4_settings,
                              accelerator="F2")
-        m4_roms = tk.Menu(m4_config, tearoff=0)
-        m4_roms.add_command(label="Installer une ROM...", command=self.m4_rom_install)
-        m4_roms.add_command(label="Supprimer une ROM...", command=self.m4_rom_delete)
-        m4_config.add_cascade(label="Gerer les ROMs", menu=m4_roms)
+        m4_config.add_command(label="Gerer les ROMs...", command=self.m4_rom_manager)
         m4.add_cascade(label="Configuration", menu=m4_config)
 
         # Sous-menu Gestion
@@ -616,6 +615,8 @@ class Viewer:
         self.m4_run()
 
     def m4_ls(self):
+        """Afficher le listing d'un dossier SD — version avec parcourir."""
+        # Fallback dialog si le parcourir échoue
         d = DialogHelper.askstring("Lister", "Dossier de la SD a lister :",
                                    initialvalue="/", parent=self.root)
         if d is None:
@@ -652,13 +653,258 @@ class Viewer:
             self._m4_async("Suppression ROM slot %d" % slot,
                            lambda: self.m4.rom_delete(slot))
 
+    def _fetch_m4_roms(self):
+        """Récupérer la liste des ROMs installées en parsant roms.shtml."""
+        import re
+        html = self.m4._get("roms.shtml").decode("latin-1", "replace")
+        roms = {}  # slot -> (name, size)
+        # Parser : chercher les lignes de ROM dans le tableau HTML
+        for match in re.finditer(r'<tr[^>]*>.*?<td[^>]*>(\d+)</td>.*?<td[^>]*>([^<]*)</td>.*?<td[^>]*>([^<]*)</td>', html, re.DOTALL | re.IGNORECASE):
+            slot_str, name, size = match.groups()
+            try:
+                slot = int(slot_str.strip())
+                roms[slot] = (name.strip(), size.strip())
+            except (ValueError, AttributeError):
+                pass
+        return roms
+
+    def m4_rom_manager(self):
+        """Gestionnaire graphique des ROMs — interface 3 colonnes."""
+        win = ctk.CTkToplevel(self.root)
+        win.title("Gestionnaire ROMs — M4 Board")
+        win.geometry("900x600")
+        win.configure(fg_color="#1a1a1a")
+
+        # Titre
+        lbl = ctk.CTkLabel(win, text="Gestionnaire des ROMs (Slots 0-31)",
+                          anchor="w", text_color="#ffd000",
+                          font=("Segoe UI", 12, "bold"))
+        lbl.pack(fill="x", padx=10, pady=8)
+
+        # Conteneur principal (3 colonnes)
+        main_frame = ctk.CTkFrame(win, fg_color="#1a1a1a")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # === COLONNE 1 : Slots (gauche) ===
+        col1_lbl = ctk.CTkLabel(main_frame, text="📊 Slots",
+                               text_color="#ffaa00", font=("Segoe UI", 11, "bold"))
+        col1_lbl.pack(side="left", padx=5, pady=5, anchor="n")
+
+        col1_frame = ctk.CTkFrame(main_frame, fg_color="#2a2a2a", width=200)
+        col1_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        col1_frame.pack_propagate(False)
+
+        slots_list = CTkListbox(col1_frame)
+        slots_list.pack(fill="both", expand=True)
+
+        selected_slot = [None]  # Slot sélectionné
+
+        def load_slots():
+            slots_list.items.clear()
+            slots_list.item_widgets.clear()
+            for slot in range(32):
+                slots_list.insert("end", "[%02d]" % slot)
+            slots_list._refresh_display()
+
+        def on_slot_select(idx):
+            selected_slot[0] = idx
+            update_details()
+
+        # Binder le click sur les items
+        original_refresh = slots_list._refresh_display
+        def new_refresh():
+            original_refresh()
+            for idx, item_frame in enumerate(slots_list.item_widgets):
+                def make_handler(i):
+                    def h(e):
+                        selected_slot[0] = i
+                        slots_list.selection = [i]
+                        slots_list._refresh_highlight()
+                        update_details()
+                    return h
+                item_frame.bind("<Button-1>", make_handler(idx))
+        slots_list._refresh_display = new_refresh
+
+        load_slots()
+
+        # === COLONNE 2 : Détails (centre) ===
+        col2_lbl = ctk.CTkLabel(main_frame, text="ℹ️ Détails",
+                               text_color="#00ff00", font=("Segoe UI", 11, "bold"))
+        col2_lbl.pack(side="left", padx=5, pady=5, anchor="n")
+
+        col2_frame = ctk.CTkFrame(main_frame, fg_color="#2a2a2a", width=250)
+        col2_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        col2_frame.pack_propagate(False)
+
+        details_text = ctk.CTkTextbox(col2_frame, fg_color="#000030",
+                                     text_color="#e0e0e0", font=("Consolas", 10))
+        details_text.pack(fill="both", expand=True)
+
+        rom_list = {}  # Cache des ROMs
+
+        def update_details():
+            details_text.delete("1.0", "end")
+            if selected_slot[0] is None:
+                details_text.insert("1.0", "(Sélectionner un slot)")
+                return
+            slot = selected_slot[0]
+            if slot in rom_list:
+                name, size = rom_list[slot]
+                details_text.insert("1.0", f"Slot {slot:02d}\n\nNom: {name}\nTaille: {size}")
+            else:
+                details_text.insert("1.0", f"Slot {slot:02d}\n\n(Vide)")
+
+        # === COLONNE 3 : Actions (droite) ===
+        col3_lbl = ctk.CTkLabel(main_frame, text="⚙️ Actions",
+                               text_color="#ff6060", font=("Segoe UI", 11, "bold"))
+        col3_lbl.pack(side="left", padx=5, pady=5, anchor="n")
+
+        col3_frame = ctk.CTkFrame(main_frame, fg_color="#2a2a2a", width=150)
+        col3_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        col3_frame.pack_propagate(False)
+
+        def do_install():
+            if selected_slot[0] is None:
+                DialogHelper.showwarning("Installer ROM", "Sélectionner un slot", parent=win)
+                return
+            local = filedialog.askopenfilename(
+                parent=win,
+                title="ROM a installer",
+                filetypes=[("ROM CPC", "*.rom *.ROM *.bin *.BIN"), ("Tous", "*.*")])
+            if not local:
+                return
+            default = os.path.splitext(os.path.basename(local))[0][:16].upper()
+            name = DialogHelper.askstring("Installer une ROM", "Nom de la ROM :",
+                                         initialvalue=default, parent=win)
+            if not name:
+                return
+            self._m4_async("Installation ROM slot %d" % selected_slot[0],
+                          lambda: self.m4.rom_install(local, selected_slot[0], name),
+                          lambda r: refresh_all())
+
+        def do_delete():
+            if selected_slot[0] is None:
+                DialogHelper.showwarning("Supprimer ROM", "Sélectionner un slot", parent=win)
+                return
+            slot = selected_slot[0]
+            if slot not in rom_list:
+                DialogHelper.showwarning("Supprimer ROM", "Slot %d vide" % slot, parent=win)
+                return
+            if DialogHelper.askyesno("Supprimer ROM", "Vider le slot %d ?" % slot, parent=win):
+                self._m4_async("Suppression ROM slot %d" % slot,
+                              lambda: self.m4.rom_delete(slot),
+                              lambda r: refresh_all())
+
+        def refresh_all():
+            def load():
+                rom_list.clear()
+                rom_list.update(self._fetch_m4_roms())
+            self._m4_async("Lecture des ROMs", load, lambda r: update_details())
+
+        ctk.CTkButton(col3_frame, text="📥 Installer", command=do_install,
+                     font=("Segoe UI", 10), fg_color="#1060c0",
+                     hover_color="#1a90ff").pack(fill="x", pady=5)
+        ctk.CTkButton(col3_frame, text="🗑️ Supprimer", command=do_delete,
+                     font=("Segoe UI", 10), fg_color="#aa0000",
+                     hover_color="#cc0000").pack(fill="x", pady=5)
+        ctk.CTkButton(col3_frame, text="🔄 Rafraîchir", command=refresh_all,
+                     font=("Segoe UI", 10), fg_color="#00aa00",
+                     hover_color="#00cc00").pack(fill="x", pady=5)
+
+        # Barre d'info
+        info_bar = ctk.CTkFrame(win, fg_color="#2a2a2a", height=30)
+        info_bar.pack(side="bottom", fill="x", padx=0, pady=0)
+        info_lbl = ctk.CTkLabel(info_bar, text="💡 N.B. : Reset M4 requis pour appliquer les changements",
+                               text_color="#ffaa00", font=("Segoe UI", 9))
+        info_lbl.pack(padx=10, pady=5)
+
+        # Charger les ROMs au démarrage
+        refresh_all()
+
+    def _browse_sd_path(self, title="Sélectionner un chemin", on_select=None):
+        """Fenêtre graphique pour parcourir et sélectionner un chemin SD.
+        Retourne le chemin sélectionné ou None si annulé."""
+        win = ctk.CTkToplevel(self.root)
+        win.title(title)
+        win.geometry("600x400")
+        win.configure(fg_color="#1a1a1a")
+        path = ["/"]
+        result = [None]
+
+        lbl = ctk.CTkLabel(win, text="SD : /", anchor="w", text_color="#ffd000",
+                          font=("Segoe UI", 11, "bold"))
+        lbl.pack(fill="x", padx=10, pady=8)
+
+        frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        lst = CTkListbox(frame)
+        lst.pack(fill="both", expand=True)
+
+        def join(base, name):
+            p = base.rstrip("/") + "/" + name
+            return "/" + "/".join(s for s in p.split("/") if s)
+
+        def refresh():
+            lbl.configure(text="SD : " + path[0])
+            lst.items.clear()
+            lst.item_widgets.clear()
+            try:
+                parsed = parse_dir(self.m4.ls(path[0]))
+            except Exception as e:
+                DialogHelper.showerror("SD", str(e), parent=win)
+                return
+            if path[0] != "/":
+                lst.insert("end", "[..]")
+            for name, is_dir, size in parsed:
+                if is_dir:
+                    lst.insert("end", "[ %s ]" % name)
+                else:
+                    lst.insert("end", "   %-22s %6s" % (name[:22], size))
+            lst._refresh_display()
+
+        def enter(_=None):
+            s = lst.curselection()
+            if not s:
+                return
+            name = parsed[s[0]][0] if s[0] < len(parsed) else ".."
+            is_dir = parsed[s[0]][1] if s[0] < len(parsed) else True
+            if name == ".." or not is_dir:
+                if name == "..":
+                    up = "/".join(path[0].strip("/").split("/")[:-1])
+                    path[0] = "/" + up if up else "/"
+                refresh()
+            else:
+                path[0] = join(path[0], name)
+                refresh()
+
+        def select_current():
+            result[0] = path[0]
+            win.destroy()
+
+        parsed = []
+        refresh()
+
+        bar = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        bar.pack(fill="x", padx=10, pady=10)
+        ctk.CTkButton(bar, text="✓ Sélectionner", command=select_current,
+                     font=("Segoe UI", 10), fg_color="#00aa00",
+                     hover_color="#00cc00").pack(side="left", padx=3)
+        ctk.CTkButton(bar, text="✕ Annuler", command=win.destroy,
+                     font=("Segoe UI", 10), fg_color="#aa0000",
+                     hover_color="#cc0000").pack(side="left", padx=3)
+
+        win.wait_window()
+        return result[0]
+
     def m4_mkdir(self):
+        """Créer un dossier — choix du chemin via parcourir ou texte."""
         d = DialogHelper.askstring("Nouveau dossier", "Chemin du dossier a creer :",
-                                   parent=self.root)
+                                   initialvalue="/", parent=self.root)
         if d:
             self._m4_async("Creation de %s" % d, lambda: self.m4.mkdir(d))
 
     def m4_rm(self):
+        """Supprimer un fichier/dossier — choix du chemin via parcourir ou texte."""
         t = DialogHelper.askstring("Supprimer",
                                    "Fichier ou dossier (vide) a supprimer :",
                                    parent=self.root)
