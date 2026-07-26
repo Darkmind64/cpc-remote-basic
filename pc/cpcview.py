@@ -655,42 +655,68 @@ class Viewer:
 
     def _fetch_m4_roms(self):
         """Récupérer l'état complet des ROMs en parsant roms.shtml.
-        Retourne : (config_dict, roms_dict) où roms_dict[slot] = (name, loaded)"""
+        Retourne : (config_dict, roms_dict) où roms_dict[slot] = name"""
         import re
         html = self.m4._get("roms.shtml").decode("latin-1", "replace")
 
-        # Parser les paramètres de configuration
+        # Parser les paramètres de configuration exactement comme le HTML
         config = {}
-        # Enabled : checkbox
-        config['enabled'] = 'checked' in html.lower()
-        # Rom number
-        m = re.search(r'name="romnum"\s+value="?(\d+)"?', html, re.IGNORECASE)
+
+        # Enabled : checkbox m4en (cherche 'checked' avant name="m4en")
+        m = re.search(r'name="m4en"[^>]*checked', html, re.IGNORECASE) or \
+            re.search(r'checked[^>]*name="m4en"', html, re.IGNORECASE)
+        config['enabled'] = bool(m)
+        config['_enabled_param'] = 'm4en'
+        config['_enabled_cgi'] = 'checkbox2.cgi'
+
+        # Rom number : input value="X" name="m4rm"
+        m = re.search(r'name="m4rm"[^>]*value="?([^">\s]+)"?', html, re.IGNORECASE) or \
+            re.search(r'value="?([^">\s]+)"?[^>]*name="m4rm"', html, re.IGNORECASE)
         config['rom_number'] = m.group(1) if m else "6"
-        # Romboard start
-        m = re.search(r'name="romstart"\s+value="?(\d+)"?', html, re.IGNORECASE)
+        config['_rom_number_param'] = 'm4rm'
+        config['_rom_number_cgi'] = 'config.cgi'
+
+        # Romboard start : input value="X" name="m4rb"
+        m = re.search(r'name="m4rb"[^>]*value="?([^">\s]+)"?', html, re.IGNORECASE) or \
+            re.search(r'value="?([^">\s]+)"?[^>]*name="m4rb"', html, re.IGNORECASE)
         config['romboard_start'] = m.group(1) if m else "0"
-        # Lower-rom Enabled
-        config['lower_enabled'] = 'name="lowerena"' in html.lower() and 'checked' in html.lower()
-        # Lower-rom slot
-        m = re.search(r'name="lowerslot"\s+value="?(\d+)"?', html, re.IGNORECASE)
+        config['_romboard_start_param'] = 'm4rb'
+        config['_romboard_start_cgi'] = 'config.cgi'
+
+        # Lower-rom Enabled : checkbox lwen
+        m = re.search(r'name="lwen"[^>]*checked', html, re.IGNORECASE) or \
+            re.search(r'checked[^>]*name="lwen"', html, re.IGNORECASE)
+        config['lower_enabled'] = bool(m)
+        config['_lower_enabled_param'] = 'lwen'
+        config['_lower_enabled_cgi'] = 'checkbox3.cgi'
+
+        # Lower-rom slot : input value="X" name="lwsl"
+        m = re.search(r'name="lwsl"[^>]*value="?([^">\s]+)"?', html, re.IGNORECASE) or \
+            re.search(r'value="?([^">\s]+)"?[^>]*name="lwsl"', html, re.IGNORECASE)
         config['lower_slot'] = m.group(1) if m else "31"
-        # Use only 16 slots
-        config['use_16_slots'] = 'name="use16"' in html.lower() and 'checked' in html.lower()
+        config['_lower_slot_param'] = 'lwsl'
+        config['_lower_slot_cgi'] = 'config.cgi'
+
+        # Use only 16 slots : checkbox rs16
+        m = re.search(r'name="rs16"[^>]*checked', html, re.IGNORECASE) or \
+            re.search(r'checked[^>]*name="rs16"', html, re.IGNORECASE)
+        config['use_16_slots'] = bool(m)
+        config['_use_16_slots_param'] = 'rs16'
+        config['_use_16_slots_cgi'] = 'checkbox4.cgi'
 
         # Parser les ROMs (chercher les lignes "Rom slot N")
         roms = {}
         for i in range(32):
-            roms[i] = ("", False)  # (nom, loaded)
+            roms[i] = ""  # nom vide par défaut
 
-        # Chercher les noms dans le HTML (cherche des patterns comme "Rom slot 3  TERM")
-        for match in re.finditer(r'Rom\s+slot\s+(\d+)\s*([^\n<]*)', html, re.IGNORECASE):
+        # Chercher les noms dans le HTML (pattern: "Rom slot 3  TERM")
+        for match in re.finditer(r'Rom\s+slot\s+(\d+)\s*([^<\n]*)', html, re.IGNORECASE):
             slot_str, name_part = match.groups()
             try:
                 slot = int(slot_str.strip())
-                # Extraire le nom (tout jusqu'à la fin ou un tag/bouton)
-                name = name_part.strip().split('<')[0].strip()
-                if name and name not in ('Remove', 'Upload', 'remove', 'upload'):
-                    roms[slot] = (name, True)
+                name = name_part.strip()
+                if name and slot < 32:
+                    roms[slot] = name
             except (ValueError, AttributeError):
                 pass
 
@@ -747,12 +773,35 @@ class Viewer:
                 config_widgets[key] = (entry, entry, "text")
 
             # Set button
-            def make_set_handler(k):
+            def make_set_handler(k, widget_info):
                 def h():
-                    # TODO: Envoyer la modification à la M4
-                    DialogHelper.showwarning("Config", "Fonction non implémentée (TODO)", parent=win)
+                    widget, var, typ = widget_info
+                    # Récupérer la valeur depuis le widget
+                    if typ == "bool":
+                        value = var.get()
+                        param_name = config.get(f'_{k}_param')
+                        cgi_name = config.get(f'_{k}_cgi')
+                        # Pour les checkboxes, envoyer "on" si coché, sinon rien
+                        if value:
+                            self._m4_async(f"Modification {k}",
+                                          lambda: self.m4._get(cgi_name, **{param_name: "on"}),
+                                          lambda r: refresh_all())
+                        else:
+                            self._m4_async(f"Modification {k}",
+                                          lambda: self.m4._get(cgi_name, **{param_name: ""}),
+                                          lambda r: refresh_all())
+                    else:
+                        value = widget.get()
+                        param_name = config.get(f'_{k}_param')
+                        cgi_name = config.get(f'_{k}_cgi')
+                        if value:
+                            self._m4_async(f"Modification {k}",
+                                          lambda: self.m4._get(cgi_name, **{param_name: value}),
+                                          lambda r: refresh_all())
                 return h
-            btn = ctk.CTkButton(config_frame, text="Set", command=make_set_handler(key),
+
+            btn = ctk.CTkButton(config_frame, text="Set",
+                               command=make_set_handler(key, config_widgets[key]),
                                width=60, font=("Segoe UI", 9), fg_color="#1060c0",
                                hover_color="#1a90ff")
             btn.grid(row=row, column=2, padx=10, pady=5)
