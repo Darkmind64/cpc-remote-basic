@@ -25,6 +25,7 @@ on l'etire en 4:3 — d'ou des caracteres plus larges qu'en console.
 """
 import argparse
 import customtkinter as ctk
+import json
 import os
 import queue
 import socket
@@ -43,6 +44,50 @@ FONT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "cpcfont.bin")
 ROWS = 25
 CELL = 8                        # un caractere CPC : 8 x 8 pixels
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cpcview_config.json")
+
+
+class ConfigManager:
+    """Gestion des paramètres persistants (config.json)."""
+
+    @staticmethod
+    def load():
+        """Charger la config depuis le fichier."""
+        defaults = {
+            "last_host": "192.168.1.139",
+            "zoom": 2,
+            "theme": "dark",
+            "window_geometry": "320x240",
+            "recent_hosts": ["192.168.1.139"],
+        }
+        if not os.path.exists(CONFIG_FILE):
+            return defaults
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                # Fusionner avec les defaults pour les clés manquantes
+                return {**defaults, **config}
+        except (json.JSONDecodeError, IOError):
+            return defaults
+
+    @staticmethod
+    def save(config):
+        """Sauvegarder la config dans le fichier."""
+        try:
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f, indent=2)
+        except IOError as e:
+            print(f"Erreur sauvegarde config: {e}")
+
+    @staticmethod
+    def update_host(host):
+        """Ajouter/mettre à jour l'host récent."""
+        config = ConfigManager.load()
+        if host not in config.get("recent_hosts", []):
+            config.setdefault("recent_hosts", []).insert(0, host)
+            config["recent_hosts"] = config["recent_hosts"][:10]  # Garder 10 derniers
+        config["last_host"] = host
+        ConfigManager.save(config)
 
 
 class DialogHelper:
@@ -372,11 +417,28 @@ class Viewer:
         self.photo = None
         self.host = link.sock.getpeername()[0]
         self.m4 = M4(self.host)     # meme carte, API HTTP (port 80)
-        self.theme = "dark"         # thème actuel (dark/light)
+
+        # Charger la config
+        self.config = ConfigManager.load()
+        ConfigManager.update_host(self.host)
+
+        # Appliquer thème sauvegardé
+        self.theme = self.config.get("theme", "dark")
+        ctk.set_appearance_mode(self.theme)
 
         root.title("CPC — %s" % self.host)
         root.configure(bg="black")
         root.geometry("%dx%d" % (160 * zoom, 120 * zoom))   # taille de depart
+
+        # Sauvegarder la géométrie/zoom à la fermeture
+        def on_closing():
+            self.config["zoom"] = zoom
+            self.config["window_geometry"] = root.geometry()
+            self.config["theme"] = self.theme
+            ConfigManager.save(self.config)
+            root.destroy()
+        root.protocol("WM_DELETE_WINDOW", on_closing)
+
         self._build_menu()
 
         # Barre d'outils (toolbar) avec actions rapides
@@ -473,6 +535,18 @@ class Viewer:
     # --- menus -----------------------------------------------------
     def _build_menu(self):
         bar = tk.Menu(self.root)
+
+        # --- Fichier (avec hosts récents)
+        f = tk.Menu(bar, tearoff=0)
+        recent_hosts = self.config.get("recent_hosts", [])
+        if recent_hosts:
+            for host in recent_hosts[:5]:  # Afficher 5 derniers
+                f.add_command(label="Reconnecter à %s" % host,
+                             command=lambda h=host: self._reconnect(h))
+            f.add_separator()
+        f.add_command(label="Quitter", command=self.root.destroy)
+        bar.add_cascade(label="Fichier", menu=f)
+
         m = tk.Menu(bar, tearoff=0)
         m.add_command(label="Relever l'ecran", command=self.do_dump,
                       accelerator="F5")
@@ -653,6 +727,29 @@ class Viewer:
             self._m4_async("Suppression ROM slot %d" % slot,
                            lambda: self.m4.rom_delete(slot))
 
+    def _get_sd_space(self):
+        """Récupérer l'estimation de l'espace utilisé sur la SD.
+        Retourne (used_kb, total_kb) ou (0, 0) si erreur."""
+        try:
+            # Parser dir.txt pour calculer la taille totale
+            dir_text = self.m4.ls("/")
+            total_size = 0
+            for line in dir_text.splitlines():
+                parts = line.rstrip("\r").rsplit(",", 2)
+                if len(parts) == 3:
+                    try:
+                        size_str = parts[2].strip()
+                        if size_str.isdigit():
+                            total_size += int(size_str)
+                    except (ValueError, AttributeError):
+                        pass
+            # Retourner en KB, et estimer le total à 512MB (valeur typique M4)
+            used_kb = total_size // 1024
+            total_kb = 512 * 1024  # 512MB
+            return used_kb, total_kb
+        except Exception:
+            return 0, 0
+
     def _fetch_m4_roms(self):
         """Récupérer l'état complet des ROMs en parsant roms.shtml.
         Retourne : (config_dict, roms_dict) où roms_dict[slot] = name"""
@@ -736,6 +833,19 @@ class Viewer:
         title_lbl = ctk.CTkLabel(win, text="🎮 M4 Rom Config",
                                 text_color="#ffff00", font=("Segoe UI", 14, "bold"))
         title_lbl.pack(pady=10)
+
+        # === ESPACE DISQUE SD ===
+        space_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        space_frame.pack(fill="x", padx=15, pady=(0, 10))
+
+        space_info_lbl = ctk.CTkLabel(space_frame, text="💾 SD Card Space: --",
+                                     text_color="#ffff00", font=("Segoe UI", 10))
+        space_info_lbl.pack(side="left", padx=10, pady=5)
+
+        space_progress = ctk.CTkProgressBar(space_frame, fg_color="#1a1a1a",
+                                           progress_color="#00aa00", width=300)
+        space_progress.set(0.5)
+        space_progress.pack(side="left", padx=10, pady=5, fill="x", expand=True)
 
         # === CONFIG SECTION (scrollable) ===
         config_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
@@ -890,8 +1000,10 @@ class Viewer:
             def load():
                 nonlocal config, roms
                 config, roms = self._fetch_m4_roms()
+                space_data = [self._get_sd_space()]  # Retourner dans une liste pour nonlocal
+                return space_data[0]
 
-            def update_ui(result):
+            def update_ui(space_info):
                 # Mettre à jour les champs de config
                 for key, (widget, var, typ) in config_widgets.items():
                     val = config.get(key, "")
@@ -901,11 +1013,30 @@ class Viewer:
                         widget.delete(0, "end")
                         widget.insert(0, str(val))
 
+                # Mettre à jour l'affichage de l'espace disque
+                if space_info:
+                    used_kb, total_kb = space_info
+                    if total_kb > 0:
+                        percent = used_kb / total_kb
+                        space_progress.set(percent)
+                        # Couleur : vert < 70%, orange 70-90%, rouge > 90%
+                        if percent < 0.7:
+                            color = "#00aa00"
+                        elif percent < 0.9:
+                            color = "#ffaa00"
+                        else:
+                            color = "#aa0000"
+                        space_progress.configure(progress_color=color)
+                        used_mb = used_kb / 1024
+                        total_mb = total_kb / 1024
+                        space_info_lbl.configure(
+                            text=f"💾 SD: {used_mb:.1f} MB / {total_mb:.1f} MB ({percent*100:.1f}%)")
+
                 # Mettre à jour l'affichage des ROMs
                 update_rom_display()
-                self.set_status("ROMs chargées")
+                self.set_status("ROMs et espace disque chargés")
 
-            self._m4_async("Lecture des ROMs", load, update_ui)
+            self._m4_async("Lecture des ROMs et espace SD", load, update_ui)
 
         # Charger au démarrage
         refresh_all()
@@ -991,19 +1122,52 @@ class Viewer:
         win.wait_window()
         return result[0]
 
+    def _ask_sd_path_method(self, title="Chemin"):
+        """Dialog pour choisir entre parcourir graphiquement ou saisir du texte."""
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title(title)
+        dialog.geometry("400x180")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        result = [None]
+
+        ctk.CTkLabel(dialog, text="Comment saisir le chemin ?",
+                    text_color="#e0e0e0", font=("Segoe UI", 12, "bold")).pack(pady=15)
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
+        btn_frame.pack(fill="x", padx=15, pady=15)
+
+        def browse():
+            result[0] = self._browse_sd_path(title=title)
+            dialog.destroy()
+
+        def type_manually():
+            result[0] = DialogHelper.askstring(title, "Chemin :",
+                                              initialvalue="/", parent=self.root)
+            if result[0] is not None:
+                dialog.destroy()
+
+        ctk.CTkButton(btn_frame, text="📂 Parcourir graphiquement", command=browse,
+                     fg_color="#1060c0", hover_color="#1a90ff",
+                     font=("Segoe UI", 10, "bold")).pack(fill="x", pady=5)
+        ctk.CTkButton(btn_frame, text="⌨️ Saisir du texte", command=type_manually,
+                     fg_color="#00aa00", hover_color="#00cc00",
+                     font=("Segoe UI", 10, "bold")).pack(fill="x", pady=5)
+
+        dialog.wait_window()
+        return result[0]
+
     def m4_mkdir(self):
         """Créer un dossier — choix du chemin via parcourir ou texte."""
-        d = DialogHelper.askstring("Nouveau dossier", "Chemin du dossier a creer :",
-                                   initialvalue="/", parent=self.root)
+        d = self._ask_sd_path_method("Créer un dossier")
         if d:
             self._m4_async("Creation de %s" % d, lambda: self.m4.mkdir(d))
 
     def m4_rm(self):
         """Supprimer un fichier/dossier — choix du chemin via parcourir ou texte."""
-        t = DialogHelper.askstring("Supprimer",
-                                   "Fichier ou dossier (vide) a supprimer :",
-                                   parent=self.root)
-        if t and DialogHelper.askyesno("Supprimer", "Supprimer %s ?" % t):
+        t = self._ask_sd_path_method("Supprimer un fichier/dossier")
+        if t and DialogHelper.askyesno("Supprimer", "Supprimer %s ?" % t, parent=self.root):
             self._m4_async("Suppression de %s" % t, lambda: self.m4.rm(t))
 
     def m4_pause(self):
