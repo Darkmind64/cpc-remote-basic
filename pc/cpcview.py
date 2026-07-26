@@ -337,9 +337,12 @@ class CTkListbox(ctk.CTkFrame):
         self._refresh_display()
 
     def delete(self, start, end=None):
-        """Supprimer des items."""
+        """Supprimer des items. Compatible tk.Listbox: delete(0, "end")."""
         if end is None:
             end = start
+        # Gérer "end" comme tk.Listbox
+        if end == "end":
+            end = len(self.items) - 1
         if isinstance(start, int) and isinstance(end, int):
             del self.items[start:end+1]
         self._refresh_display()
