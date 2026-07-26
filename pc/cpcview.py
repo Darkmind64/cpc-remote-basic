@@ -442,6 +442,25 @@ class CTkListbox(ctk.CTkFrame):
                 widget.configure(fg_color="#000030")
 
 
+def position_window_on_parent_screen(window, parent, width, height):
+    """Position une fenêtre sur le même écran que son parent en multi-écran."""
+    try:
+        parent.update_idletasks()
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_w = parent.winfo_width()
+        parent_h = parent.winfo_height()
+
+        window_x = parent_x + (parent_w - width) // 2
+        window_y = parent_y + (parent_h - height) // 2
+
+        # CRUCIAL: Coordonnées absolues force le positionnement sur le bon écran
+        window.geometry(f"{width}x{height}+{window_x}+{window_y}")
+    except Exception:
+        # Fallback
+        window.geometry(f"{width}x{height}")
+
+
 class Viewer:
     def __init__(self, root, link, font, zoom, want_dump):
         self.root, self.link, self.font = root, link, font
@@ -893,7 +912,7 @@ class Viewer:
         """Gestionnaire graphique des ROMs — interface propre et organisée."""
         win = ctk.CTkToplevel(self.root)
         win.title("Gestionnaire ROMs — M4 Board")
-        win.geometry("600x900")
+        position_window_on_parent_screen(win, self.root, 600, 900)
         win.configure(fg_color="#1a1a1a")
         # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
@@ -1252,7 +1271,7 @@ class Viewer:
         Retourne le chemin sélectionné ou None si annulé."""
         win = ctk.CTkToplevel(self.root)
         win.title(title)
-        win.geometry("600x400")
+        position_window_on_parent_screen(win, self.root, 600, 400)
         win.configure(fg_color="#1a1a1a")
         # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
         path = ["/"]
@@ -1391,7 +1410,7 @@ class Viewer:
         colors = self.get_theme_colors()
         win = ctk.CTkToplevel(self.root)
         win.title(title)
-        win.geometry("800x600")
+        position_window_on_parent_screen(win, self.root, 800, 600)
         win.configure(fg_color=colors["bg"])
         # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
@@ -1424,7 +1443,7 @@ class Viewer:
         permet de soumettre les modifications. Interface modernisée avec customtkinter."""
         win = ctk.CTkToplevel(self.root)
         win.title("Parametres M4")
-        win.geometry("700x550")
+        position_window_on_parent_screen(win, self.root, 700, 550)
         win.configure(fg_color="#1a1a1a")
         # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
@@ -1582,7 +1601,7 @@ class Viewer:
     def m4_browse(self):
         win = ctk.CTkToplevel(self.root)
         win.title("SD du CPC — M4 Board")
-        win.geometry("600x600")
+        position_window_on_parent_screen(win, self.root, 600, 600)
         win.configure(fg_color="#1a1a1a")
         # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
         path = ["/"]                        # chemin courant (mutable -> closures)
