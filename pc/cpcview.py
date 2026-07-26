@@ -445,6 +445,12 @@ class Viewer:
             self.config["theme"] = self.theme
             ConfigManager.save(self.config)
             root.destroy()
+
+        # Fonction pour quitter proprement (via menu ou autre)
+        def quit_app():
+            on_closing()
+
+        self.quit_app = quit_app
         root.protocol("WM_DELETE_WINDOW", on_closing)
 
         self._build_menu()
@@ -552,7 +558,7 @@ class Viewer:
                 f.add_command(label="Reconnecter à %s" % host,
                              command=lambda h=host: self._reconnect(h))
             f.add_separator()
-        f.add_command(label="Quitter", command=self.root.destroy)
+        f.add_command(label="Quitter", command=self.quit_app)
         bar.add_cascade(label="Fichier", menu=f)
 
         m = tk.Menu(bar, tearoff=0)
@@ -560,7 +566,7 @@ class Viewer:
                       accelerator="F5")
         m.add_command(label="Recharger la police du CPC", command=self.do_refont)
         m.add_separator()
-        m.add_command(label="Quitter", command=self.root.destroy)
+        m.add_command(label="Quitter", command=self.quit_app)
         bar.add_cascade(label="Ecran", menu=m)
         t = tk.Menu(bar, tearoff=0)
         for z in (4, 5, 6, 7, 8):
