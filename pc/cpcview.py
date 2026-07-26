@@ -1958,12 +1958,8 @@ def main():
 
     root = tk.Tk()
 
-    # Créer le Viewer AVANT d'appliquer la géométrie
-    # (la géométrie sera appliquée dans Viewer.__init__)
-    Viewer(root, link, font, zoom, args.dump)
-
-    # Appliquer la géométrie sauvegardée APRÈS le Viewer est créé
-    # Utiliser update_idletasks() pour s'assurer que Tkinter a initialisé la fenêtre
+    # Appliquer la géométrie AVANT de créer le Viewer
+    # (Les fenêtres créées dans Viewer.__init__ ont besoin des coordonnées correctes du parent)
     root.update_idletasks()
     saved_geometry = config.get("window_geometry")
     if saved_geometry:
@@ -1975,6 +1971,10 @@ def main():
             root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
     else:
         root.geometry("%dx%d" % (160 * zoom, 120 * zoom))
+
+    # Créer le Viewer APRÈS avoir appliqué la géométrie
+    # (Maintenant les fenêtres enfants seront créées avec les bonnes coordonnées du parent)
+    Viewer(root, link, font, zoom, args.dump)
     try:
         root.mainloop()
     finally:
