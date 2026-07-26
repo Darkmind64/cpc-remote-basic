@@ -1,0 +1,53 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'pc/**'
+      - 'requirements.txt'
+      - '.github/workflows/build-windows-exe.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+
+    - name: Build executable with PyInstaller
+      run: |
+        cd pc
+        pyinstaller --onefile ^
+          --windowed ^
+          --name cpcview ^
+          --add-data "cpcterm.py:." ^
+          --add-data "m4term.py:." ^
+          --hidden-import=customtkinter ^
+          --hidden-import=PIL ^
+          cpcview.py
+      shell: cmd
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: pc/dist/cpcview.exe
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: cpcview-windows
+        path: pc/dist/cpcview.exe

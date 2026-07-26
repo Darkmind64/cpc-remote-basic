@@ -51,3 +51,8 @@ pc/cpcview_config.json
 
 # Configuration locale de Claude Code / Claude Code local settings
 .claude/
+
+# PyInstaller build artefacts / PyInstaller build artifacts
+pc/build/
+pc/dist/
+pc/*.spec
