@@ -378,6 +378,28 @@ class Viewer:
         root.configure(bg="black")
         root.geometry("%dx%d" % (160 * zoom, 120 * zoom))   # taille de depart
         self._build_menu()
+
+        # Barre d'outils (toolbar) avec actions rapides
+        toolbar = ctk.CTkFrame(root, fg_color="#2a2a2a", height=40)
+        toolbar.pack(side="top", fill="x", padx=0, pady=0)
+        toolbar.pack_propagate(False)
+
+        # Boutons de la toolbar
+        btn_style = {"font": ("Segoe UI", 10), "fg_color": "#1060c0",
+                    "hover_color": "#1a90ff", "text_color": "#ffff00"}
+        ctk.CTkButton(toolbar, text="📁 Fichiers", command=self.m4_browse,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="⚙️ Param", command=self.m4_settings,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="▶️ Lancer", command=self.m4_run_dialog,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="⏸ Pause", command=self.m4_pause,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="🔌 Reset CPC", command=self.m4_reset_cpc,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+        ctk.CTkButton(toolbar, text="🔄 Reset M4", command=self.m4_reset_m4,
+                     **btn_style).pack(side="left", padx=3, pady=6)
+
         # Barre de statut en bas (empilee AVANT le canvas pour qu'elle garde
         # sa place, le canvas prenant tout le reste).
         self.status_msg = "connecte"
@@ -390,7 +412,13 @@ class Viewer:
         self.canvas = tk.Canvas(root, highlightthickness=0, bg="black")
         self.canvas.pack(side="top", fill="both", expand=True)
         root.bind("<Key>", self.on_key)
+        # Raccourcis clavier
+        root.bind("<F1>", lambda e: self._show_help())
+        root.bind("<F2>", lambda e: self.m4_settings())
+        root.bind("<F3>", lambda e: self.m4_browse())
         root.bind("<F5>", lambda e: self.do_dump())
+        root.bind("<Control-l>", lambda e: self.m4_run_dialog())
+        root.bind("<Control-r>", lambda e: self.do_dump())
         root.bind("<Control-v>", lambda e: self.paste())
         # Redimensionnement : on marque juste "a redessiner" ; la boucle
         # tick() redessine dans les 50 ms a la nouvelle taille (evite de
@@ -468,25 +496,50 @@ class Viewer:
 
         # --- carte M4 : les fonctions de l'interface web, via son API HTTP
         m4 = tk.Menu(bar, tearoff=0)
-        m4.add_command(label="Navigateur de fichiers...", command=self.m4_browse)
-        m4.add_command(label="Parametres...", command=self.m4_settings)
-        m4.add_separator()
-        m4.add_command(label="Envoyer un fichier vers la SD...",
-                       command=self.m4_upload)
-        m4.add_command(label="Telecharger un fichier...", command=self.m4_download)
-        m4.add_command(label="Lancer un programme...", command=self.m4_run)
-        m4.add_command(label="Lister un dossier...", command=self.m4_ls)
-        m4.add_separator()
-        m4.add_command(label="Installer une ROM...", command=self.m4_rom_install)
-        m4.add_command(label="Supprimer une ROM...", command=self.m4_rom_delete)
-        m4.add_separator()
-        m4.add_command(label="Nouveau dossier...", command=self.m4_mkdir)
-        m4.add_command(label="Supprimer un fichier/dossier...", command=self.m4_rm)
-        m4.add_separator()
-        m4.add_command(label="Pause / reprise CPC", command=self.m4_pause)
-        m4.add_command(label="Reset CPC", command=self.m4_reset_cpc)
-        m4.add_command(label="Reset carte M4", command=self.m4_reset_m4)
+
+        # Sous-menu Fichiers
+        m4_files = tk.Menu(m4, tearoff=0)
+        m4_files.add_command(label="Navigateur de fichiers...", command=self.m4_browse,
+                            accelerator="F3")
+        m4_files.add_command(label="Envoyer un fichier vers la SD...",
+                            command=self.m4_upload)
+        m4_files.add_command(label="Telecharger un fichier...", command=self.m4_download)
+        m4_files.add_command(label="Lancer un programme...", command=self.m4_run,
+                            accelerator="Ctrl+L")
+        m4_files.add_command(label="Lister un dossier...", command=self.m4_ls)
+        m4.add_cascade(label="Fichiers", menu=m4_files)
+
+        # Sous-menu Configuration
+        m4_config = tk.Menu(m4, tearoff=0)
+        m4_config.add_command(label="Parametres M4...", command=self.m4_settings,
+                             accelerator="F2")
+        m4_roms = tk.Menu(m4_config, tearoff=0)
+        m4_roms.add_command(label="Installer une ROM...", command=self.m4_rom_install)
+        m4_roms.add_command(label="Supprimer une ROM...", command=self.m4_rom_delete)
+        m4_config.add_cascade(label="Gerer les ROMs", menu=m4_roms)
+        m4.add_cascade(label="Configuration", menu=m4_config)
+
+        # Sous-menu Gestion
+        m4_manage = tk.Menu(m4, tearoff=0)
+        m4_manage.add_command(label="Nouveau dossier...", command=self.m4_mkdir)
+        m4_manage.add_command(label="Supprimer un fichier/dossier...", command=self.m4_rm)
+        m4.add_cascade(label="Gestion", menu=m4_manage)
+
+        # Sous-menu Controle
+        m4_control = tk.Menu(m4, tearoff=0)
+        m4_control.add_command(label="Pause / reprise CPC", command=self.m4_pause)
+        m4_control.add_command(label="Reset CPC", command=self.m4_reset_cpc)
+        m4_control.add_command(label="Reset carte M4", command=self.m4_reset_m4)
+        m4.add_cascade(label="Controle", menu=m4_control)
+
         bar.add_cascade(label="M4", menu=m4)
+
+        # --- Menu Aide
+        h = tk.Menu(bar, tearoff=0)
+        h.add_command(label="Raccourcis clavier (F1)", command=self._show_help,
+                     accelerator="F1")
+        bar.add_cascade(label="Aide", menu=h)
+
         self.root.config(menu=bar)
 
     # --- carte M4 (API HTTP) : operations en tache de fond -------------
@@ -557,6 +610,10 @@ class Viewer:
             return
         self.link.send(('RUN"%s"\r' % name).encode("latin-1", "replace"))
         self.set_status('RUN"%s"' % name)
+
+    def m4_run_dialog(self):
+        """Alias pour la toolbar — demande le nom du fichier à lancer."""
+        self.m4_run()
 
     def m4_ls(self):
         d = DialogHelper.askstring("Lister", "Dossier de la SD a lister :",
@@ -937,6 +994,31 @@ class Viewer:
                          fg_color="#1060c0", text_color="#ffff00",
                          hover_color="#1a90ff").pack(side="left", padx=3)
         refresh()
+
+    def _show_help(self):
+        """Afficher l'aide des raccourcis clavier."""
+        help_text = """📖 CPCVIEW — Raccourcis clavier
+
+Affichage :
+  F5              Relever l'écran
+  Ctrl+R          Relever l'écran (alternative)
+
+Édition :
+  Ctrl+V          Coller depuis le presse-papiers
+
+M4 Board :
+  F2              Ouvrir les paramètres
+  F3              Ouvrir le navigateur de fichiers
+  Ctrl+L          Lancer un programme
+
+Toolbar :
+  📁 Fichiers     Navigateur de fichiers
+  ⚙️ Param        Paramètres M4
+  ▶️ Lancer       Lancer un programme
+  ⏸ Pause         Pause/Reprise du CPC
+  🔌 Reset CPC    Redémarrer le CPC
+  🔄 Reset M4     Redémarrer la carte M4"""
+        self._show_text("Aide", help_text)
 
     def do_dump(self):
         """Relever l'ecran actuel du CPC (comme --dump, a la demande)."""
