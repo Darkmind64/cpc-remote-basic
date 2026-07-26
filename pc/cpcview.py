@@ -873,7 +873,7 @@ class Viewer:
         """Gestionnaire graphique des ROMs — interface propre et organisée."""
         win = ctk.CTkToplevel(self.root)
         win.title("Gestionnaire ROMs — M4 Board")
-        win.geometry("900x900")
+        win.geometry("600x900")
         win.configure(fg_color="#1a1a1a")
 
         config = {}
@@ -1008,7 +1008,7 @@ class Viewer:
                 name_text = rom_name[:8] if rom_name else "---"
                 name_lbl = ctk.CTkLabel(slot_frame, text=name_text,
                                        text_color="#ffff00" if rom_name else "#666666",
-                                       font=("Consolas", 14), wraplength=80,
+                                       font=("Consolas", 14), wraplength=55,
                                        justify="center")
                 name_lbl.pack(pady=(0, 2), padx=1, fill="x")
 
