@@ -900,8 +900,7 @@ class Viewer:
         win.title("Gestionnaire ROMs — M4 Board")
         win.geometry("600x900")
         win.configure(fg_color="#1a1a1a")
-        # Rendre la fenêtre modale
-        win.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         win.grab_set()
 
         config = {}
@@ -1261,8 +1260,7 @@ class Viewer:
         win.title(title)
         win.geometry("600x400")
         win.configure(fg_color="#1a1a1a")
-        # Rendre la fenêtre modale
-        win.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         win.grab_set()
         path = ["/"]
         result = [None]
@@ -1403,8 +1401,7 @@ class Viewer:
         win.title(title)
         win.geometry("800x600")
         win.configure(fg_color=colors["bg"])
-        # Rendre la fenêtre modale
-        win.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         win.grab_set()
 
         # Barre de titre
@@ -1438,8 +1435,7 @@ class Viewer:
         win.title("Parametres M4")
         win.geometry("700x550")
         win.configure(fg_color="#1a1a1a")
-        # Rendre la fenêtre modale
-        win.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         win.grab_set()
 
         # Definition des parametres par section (extensible)
@@ -1598,8 +1594,7 @@ class Viewer:
         win.title("SD du CPC — M4 Board")
         win.geometry("600x600")
         win.configure(fg_color="#1a1a1a")
-        # Rendre la fenêtre modale
-        win.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         win.grab_set()
         path = ["/"]                        # chemin courant (mutable -> closures)
         rows = []                           # (nom, est_dossier, taille) affiches
