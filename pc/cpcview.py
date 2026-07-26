@@ -1336,8 +1336,7 @@ class Viewer:
         dialog.title(title)
         dialog.geometry("400x180")
         dialog.configure(fg_color="#1a1a1a")
-        # Rendre la fenêtre modale
-        dialog.transient(self.root)
+        # Capturer le focus (sans transient qui cause problèmes multi-écran)
         dialog.grab_set()
         dialog.resizable(False, False)
 
