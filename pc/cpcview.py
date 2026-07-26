@@ -124,10 +124,12 @@ class Viewer:
         # Barre de statut en bas (empilee AVANT le canvas pour qu'elle garde
         # sa place, le canvas prenant tout le reste).
         self.status_msg = "connecte"
-        self.statusbar = tk.Label(root, anchor="w", bd=1, relief="sunken",
-                                  bg="#202020", fg="#d0d0d0", padx=6,
-                                  font=("Segoe UI", 9))
-        self.statusbar.pack(side="bottom", fill="x")
+        # Barre de statut modernisée avec customtkinter
+        statusbar_frame = ctk.CTkFrame(root, fg_color="#2a2a2a", height=35)
+        statusbar_frame.pack(side="bottom", fill="x", padx=0, pady=0)
+        self.statusbar = ctk.CTkLabel(statusbar_frame, text="", anchor="w",
+                                     text_color="#d0d0d0", font=("Segoe UI", 9))
+        self.statusbar.pack(fill="x", padx=10, pady=8)
         self.canvas = tk.Canvas(root, highlightthickness=0, bg="black")
         self.canvas.pack(side="top", fill="both", expand=True)
         root.bind("<Key>", self.on_key)
@@ -700,7 +702,7 @@ class Viewer:
     def _update_status(self):
         mode = {20: "0", 40: "1", 80: "2"}.get(self.screen.width, "?")
         etat = "deconnecte" if self._closed else "connecte"
-        self.statusbar.config(
+        self.statusbar.configure(
             text="%s : %s    MODE %s    L%02d C%02d    |    %s"
             % (self.host, etat, mode, self.screen.row + 1, self.screen.col + 1,
                self.status_msg))
