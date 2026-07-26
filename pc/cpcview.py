@@ -1356,7 +1356,7 @@ class Viewer:
         dialog.title(title)
         dialog.geometry("400x180")
         dialog.configure(fg_color="#1a1a1a")
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
+        # Capturer le focus et garder le dialogue en premier plan
         dialog.grab_set()
         dialog.resizable(False, False)
 

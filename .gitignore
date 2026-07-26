@@ -45,3 +45,9 @@ cpc/cterm2_blob.inc
 # Cache local du jeu de caracteres, recupere du CPC au 1er lancement de
 # cpcview.py / local font cache, fetched from the CPC on first run
 pc/cpcfont.bin
+
+# Configuration locale de cpcview / local cpcview configuration
+pc/cpcview_config.json
+
+# Configuration locale de Claude Code / Claude Code local settings
+.claude/
