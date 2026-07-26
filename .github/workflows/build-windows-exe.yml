@@ -19,7 +19,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
@@ -30,6 +30,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Build executable with PyInstaller
+      timeout-minutes: 15
       run: |
         cd pc
         pyinstaller --onefile ^
@@ -42,8 +43,19 @@ jobs:
           cpcview.py
       shell: cmd
 
+    - name: Verify build output
+      run: |
+        if exist "pc\dist\cpcview.exe" (
+          echo Build successful - cpcview.exe created
+          dir pc\dist\cpcview.exe
+        ) else (
+          echo ERROR: cpcview.exe not found
+          exit /b 1
+        )
+      shell: cmd
+
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: pc/dist/cpcview.exe
