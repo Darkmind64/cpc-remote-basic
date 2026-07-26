@@ -962,6 +962,8 @@ class Viewer:
 
         for col in range(4):
             board_grid.columnconfigure(col, weight=1)
+        for row in range(8):
+            board_grid.rowconfigure(row, weight=0)
 
         rom_widgets = {}
         rom_display_grid = []
@@ -978,7 +980,7 @@ class Viewer:
                 rom_name = roms.get(slot, "")
 
                 slot_frame = ctk.CTkFrame(board_grid, fg_color="#0d2a0d" if rom_name else "#1a1a1a",
-                                         corner_radius=3, border_width=1,
+                                         corner_radius=3, border_width=1, height=60,
                                          border_color="#00aa00" if rom_name else "#333333")
                 slot_frame.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
 
