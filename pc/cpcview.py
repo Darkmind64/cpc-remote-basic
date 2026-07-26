@@ -94,13 +94,37 @@ class DialogHelper:
     """Dialogs modernes avec customtkinter pour remplacer tkinter.simpledialog."""
 
     @staticmethod
+    def _setup_dialog(dialog, parent, width=400, height=150):
+        """Configure une fenêtre dialogue pour qu'elle soit modale et centrée."""
+        dialog.geometry(f"{width}x{height}")
+        dialog.configure(fg_color="#1a1a1a")
+        dialog.resizable(False, False)
+
+        # Rendre la fenêtre modale (toujours au-dessus du parent)
+        if parent:
+            dialog.transient(parent)
+            dialog.grab_set()
+
+            # Centrer la fenêtre sur le parent
+            try:
+                parent.update_idletasks()
+                px = parent.winfo_x()
+                py = parent.winfo_y()
+                pw = parent.winfo_width()
+                ph = parent.winfo_height()
+
+                x = px + (pw - width) // 2
+                y = py + (ph - height) // 2
+                dialog.geometry(f"{width}x{height}+{x}+{y}")
+            except:
+                pass  # Ignorer les erreurs de positionnement
+
+    @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
         """Input dialog — retourne la chaîne saisie ou None si annulé."""
         dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
-        dialog.geometry("400x150")
-        dialog.configure(fg_color="#1a1a1a")
-        dialog.resizable(False, False)
+        DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
         result = [None]
 
@@ -136,9 +160,7 @@ class DialogHelper:
         """Confirmation dialog — retourne True/False."""
         dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
-        dialog.geometry("400x150")
-        dialog.configure(fg_color="#1a1a1a")
-        dialog.resizable(False, False)
+        DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
         result = [False]
 
@@ -169,9 +191,7 @@ class DialogHelper:
         """Error dialog."""
         dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
-        dialog.geometry("400x180")
-        dialog.configure(fg_color="#1a1a1a")
-        dialog.resizable(False, False)
+        DialogHelper._setup_dialog(dialog, parent, 400, 180)
 
         ctk.CTkLabel(dialog, text=message, text_color="#ff6060",
                     font=("Segoe UI", 11), wraplength=350).pack(padx=15, pady=20)
@@ -192,9 +212,7 @@ class DialogHelper:
         """Warning dialog."""
         dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
-        dialog.geometry("400x180")
-        dialog.configure(fg_color="#1a1a1a")
-        dialog.resizable(False, False)
+        DialogHelper._setup_dialog(dialog, parent, 400, 180)
 
         ctk.CTkLabel(dialog, text=message, text_color="#ffaa00",
                     font=("Segoe UI", 11), wraplength=350).pack(padx=15, pady=20)
@@ -215,9 +233,7 @@ class DialogHelper:
         """Integer input dialog — retourne l'entier ou None si annulé."""
         dialog = ctk.CTkToplevel(parent)
         dialog.title(title)
-        dialog.geometry("400x150")
-        dialog.configure(fg_color="#1a1a1a")
-        dialog.resizable(False, False)
+        DialogHelper._setup_dialog(dialog, parent, 400, 150)
 
         result = [None]
 
@@ -875,6 +891,9 @@ class Viewer:
         win.title("Gestionnaire ROMs — M4 Board")
         win.geometry("600x900")
         win.configure(fg_color="#1a1a1a")
+        # Rendre la fenêtre modale
+        win.transient(self.root)
+        win.grab_set()
 
         config = {}
         roms = {}
@@ -1233,6 +1252,9 @@ class Viewer:
         win.title(title)
         win.geometry("600x400")
         win.configure(fg_color="#1a1a1a")
+        # Rendre la fenêtre modale
+        win.transient(self.root)
+        win.grab_set()
         path = ["/"]
         result = [None]
 
@@ -1307,6 +1329,9 @@ class Viewer:
         dialog.title(title)
         dialog.geometry("400x180")
         dialog.configure(fg_color="#1a1a1a")
+        # Rendre la fenêtre modale
+        dialog.transient(self.root)
+        dialog.grab_set()
         dialog.resizable(False, False)
 
         result = [None]
@@ -1369,6 +1394,9 @@ class Viewer:
         win.title(title)
         win.geometry("800x600")
         win.configure(fg_color=colors["bg"])
+        # Rendre la fenêtre modale
+        win.transient(self.root)
+        win.grab_set()
 
         # Barre de titre
         header = ctk.CTkFrame(win, fg_color=colors["accent"])
@@ -1401,6 +1429,9 @@ class Viewer:
         win.title("Parametres M4")
         win.geometry("700x550")
         win.configure(fg_color="#1a1a1a")
+        # Rendre la fenêtre modale
+        win.transient(self.root)
+        win.grab_set()
 
         # Definition des parametres par section (extensible)
         # Clés correspond aux noms d'attributs name= du HTML /settings.shtml
@@ -1558,6 +1589,9 @@ class Viewer:
         win.title("SD du CPC — M4 Board")
         win.geometry("600x600")
         win.configure(fg_color="#1a1a1a")
+        # Rendre la fenêtre modale
+        win.transient(self.root)
+        win.grab_set()
         path = ["/"]                        # chemin courant (mutable -> closures)
         rows = []                           # (nom, est_dossier, taille) affiches
 
