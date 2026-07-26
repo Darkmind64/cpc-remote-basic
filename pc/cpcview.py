@@ -95,38 +95,17 @@ class DialogHelper:
 
     @staticmethod
     def _setup_dialog(dialog, parent, width=400, height=150):
-        """Configure une fenêtre dialogue pour qu'elle soit modale et centrée."""
+        """Configure une fenêtre dialogue - juste la taille, laisser Tkinter positionner."""
         dialog.configure(fg_color="#1a1a1a")
         dialog.resizable(False, False)
 
-        # Ne PAS définir de géométrie par défaut - laisser le système décider
-        # Pour éviter les problèmes de multi-écran
+        # Définir SEULEMENT la taille - ne JAMAIS repositionner
+        # Tkinter positionne les fenêtres correctement en multi-écran d'habitude
+        dialog.geometry(f"{width}x{height}")
 
-        if parent:
-            try:
-                parent.update()
-
-                # Juste définir la taille, pas la position
-                # Tkinter positionnera la fenêtre sur le même écran que le parent
-                dialog.geometry(f"{width}x{height}")
-
-                # Capturer le focus
-                dialog.grab_set()
-
-                # Décaler légèrement par rapport au parent
-                parent_x = parent.winfo_x()
-                parent_y = parent.winfo_y()
-                if parent_x >= 0 and parent_y >= 0:
-                    # Utiliser les coordonnées du parent
-                    offset_x = parent_x + 50
-                    offset_y = parent_y + 50
-                    dialog.wm_geometry(f"+{offset_x}+{offset_y}")
-            except Exception:
-                # Fallback simple
-                dialog.geometry(f"{width}x{height}")
-                dialog.grab_set()
-        else:
-            dialog.geometry(f"{width}x{height}")
+        # Le grab_set() DOIT être appelé APRÈS geometry
+        # pour ne pas interférer avec le positionnement
+        dialog.grab_set()
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
