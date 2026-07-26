@@ -76,10 +76,12 @@ class DialogHelper:
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
         btn_frame.pack(fill="x", padx=15, pady=15)
-        ctk.CTkButton(btn_frame, text="OK", command=ok, width=80,
-                     fg_color="#1060c0", hover_color="#1a90ff").pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="Annuler", command=cancel, width=80,
-                     fg_color="#404040", hover_color="#606060").pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="✓ OK", command=ok, width=90,
+                     fg_color="#1060c0", hover_color="#1a90ff",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+        ctk.CTkButton(btn_frame, text="✕ Annuler", command=cancel, width=90,
+                     fg_color="#404040", hover_color="#606060",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
 
         dialog.wait_window()
         return result[0]
@@ -107,10 +109,12 @@ class DialogHelper:
 
         btn_frame = ctk.CTkFrame(dialog, fg_color="#1a1a1a")
         btn_frame.pack(fill="x", padx=15, pady=15)
-        ctk.CTkButton(btn_frame, text="✓ Oui", command=yes, width=80,
-                     fg_color="#00aa00", hover_color="#00cc00").pack(side="left", padx=5)
-        ctk.CTkButton(btn_frame, text="✕ Non", command=no, width=80,
-                     fg_color="#aa0000", hover_color="#cc0000").pack(side="left", padx=5)
+        ctk.CTkButton(btn_frame, text="✓ Oui", command=yes, width=90,
+                     fg_color="#00aa00", hover_color="#00cc00",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
+        ctk.CTkButton(btn_frame, text="✕ Non", command=no, width=90,
+                     fg_color="#aa0000", hover_color="#cc0000",
+                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=10, expand=True)
 
         dialog.wait_window()
         return result[0]
