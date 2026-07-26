@@ -115,6 +115,7 @@ class Viewer:
         self.photo = None
         self.host = link.sock.getpeername()[0]
         self.m4 = M4(self.host)     # meme carte, API HTTP (port 80)
+        self.theme = "dark"         # thème actuel (dark/light)
 
         root.title("CPC — %s" % self.host)
         root.configure(bg="black")
@@ -152,6 +153,34 @@ class Viewer:
         threading.Thread(target=self.reader, daemon=True).start()
         self.tick()
 
+    # --- thème (dark/light) ------------------------------------------------
+    def get_theme_colors(self):
+        """Retourner les couleurs selon le thème actuel."""
+        if self.theme == "dark":
+            return {
+                "bg": "#1a1a1a",
+                "fg": "#e0e0e0",
+                "accent": "#1060c0",
+                "button_hover": "#1a90ff",
+                "success": "#00ff00",
+                "label": "#ffd000"
+            }
+        else:  # light
+            return {
+                "bg": "#f5f5f5",
+                "fg": "#1a1a1a",
+                "accent": "#0050cc",
+                "button_hover": "#3366ff",
+                "success": "#00aa00",
+                "label": "#ff8800"
+            }
+
+    def toggle_theme(self):
+        """Basculer entre thème sombre et clair."""
+        self.theme = "light" if self.theme == "dark" else "dark"
+        colors = self.get_theme_colors()
+        ctk.set_appearance_mode("light" if self.theme == "light" else "dark")
+
     # --- menus -----------------------------------------------------
     def _build_menu(self):
         bar = tk.Menu(self.root)
@@ -167,6 +196,11 @@ class Viewer:
             t.add_command(label="x%d  (%dx%d)" % (z, 160 * z, 120 * z),
                           command=lambda z=z: self.set_size(z))
         bar.add_cascade(label="Taille", menu=t)
+
+        # --- Affichage
+        v = tk.Menu(bar, tearoff=0)
+        v.add_command(label="Basculer thème (Dark/Light)", command=self.toggle_theme)
+        bar.add_cascade(label="Affichage", menu=v)
 
         # --- Édition
         ed = tk.Menu(bar, tearoff=0)
@@ -329,14 +363,34 @@ class Viewer:
             self._m4_async("Reset carte M4", self.m4.reset_m4)
 
     def _show_text(self, title, text):
-        win = tk.Toplevel(self.root)
+        """Afficher du texte dans une fenêtre modernisée avec customtkinter."""
+        colors = self.get_theme_colors()
+        win = ctk.CTkToplevel(self.root)
         win.title(title)
-        win.configure(bg="black")
-        txt = tk.Text(win, width=64, height=28, bg="#000080", fg="#ffff00",
-                      insertbackground="#ffff00", font=("Courier New", 10))
-        txt.pack(fill="both", expand=True)
+        win.geometry("800x600")
+        win.configure(fg_color=colors["bg"])
+
+        # Barre de titre
+        header = ctk.CTkFrame(win, fg_color=colors["accent"])
+        header.pack(fill="x", padx=0, pady=0)
+        ctk.CTkLabel(header, text=title, text_color="#ffffff",
+                    font=("Segoe UI", 13, "bold")).pack(padx=15, pady=8)
+
+        # TextBox moderne avec customtkinter
+        txt = ctk.CTkTextbox(win, fg_color="#2a2a2a" if self.theme == "dark" else "#ffffff",
+                            text_color=colors["fg"], font=("Consolas", 11),
+                            border_color=colors["accent"], border_width=1)
+        txt.pack(fill="both", expand=True, padx=10, pady=10)
         txt.insert("1.0", text)
-        txt.config(state="disabled")
+        txt.configure(state="disabled")
+
+        # Bouton fermer en bas
+        btn_frame = ctk.CTkFrame(win, fg_color=colors["bg"])
+        btn_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkButton(btn_frame, text="Fermer", command=win.destroy,
+                     fg_color=colors["accent"], text_color="#ffffff",
+                     hover_color=colors["button_hover"],
+                     font=("Segoe UI", 11, "bold")).pack(side="right")
 
     # --- panneau de parametres de la M4 (generique et extensible) ------
     def m4_settings(self):
