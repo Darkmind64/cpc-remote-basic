@@ -24,6 +24,7 @@ on l'etire en 4:3 — d'ou des caracteres plus larges qu'en console.
     python cpcview.py <ip-du-cpc> --zoom 3     fenetre plus grande
 """
 import argparse
+import customtkinter as ctk
 import os
 import queue
 import socket
@@ -341,11 +342,11 @@ class Viewer:
     def m4_settings(self):
         """Afficher les parametres de la M4 dans un panneau avec onglets.
         Recupere les valeurs actuelles via HTTP, affiche un formulaire, et
-        permet de soumettre les modifications."""
-        win = tk.Toplevel(self.root)
+        permet de soumettre les modifications. Interface modernisée avec customtkinter."""
+        win = ctk.CTkToplevel(self.root)
         win.title("Parametres M4")
-        win.geometry("600x500")
-        win.configure(bg="#101010")
+        win.geometry("700x550")
+        win.configure(fg_color="#1a1a1a")
 
         # Definition des parametres par section (extensible)
         # Clés correspond aux noms d'attributs name= du HTML /settings.shtml
@@ -367,69 +368,59 @@ class Viewer:
             ],
         }
 
-        # Creation des onglets (ttk.Notebook = vrais onglets)
-        notebook = ttk.Notebook(win)
-        notebook.pack(fill="both", expand=True, padx=6, pady=6)
+        # Creation des onglets avec customtkinter
+        tabview = ctk.CTkTabview(win, fg_color="#2a2a2a", segmented_button_fg_color="#1060c0")
+        tabview.pack(fill="both", expand=True, padx=10, pady=10)
 
         fields = {}
 
         for section_name, params in sections.items():
-            # Frame pour cet onglet
-            tab = tk.Frame(notebook, bg="#101010")
-            notebook.add(tab, text=section_name)
+            # Créer un onglet
+            tabview.add(section_name)
+            tab = tabview.tab(section_name)
+            tab.configure(fg_color="#1a1a1a")
 
             # ScrollBar pour les longs formulaires
-            canvas = tk.Canvas(tab, bg="#101010", highlightthickness=0)
-            scrollbar = tk.Scrollbar(tab, orient="vertical", command=canvas.yview)
-            scrollable_frame = tk.Frame(canvas, bg="#101010")
-            scrollable_frame.bind(
-                "<Configure>",
-                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-            )
-            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-            canvas.configure(yscrollcommand=scrollbar.set)
-            canvas.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
+            scrollable_frame = ctk.CTkScrollableFrame(tab, fg_color="#1a1a1a")
+            scrollable_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
             # Ajouter les champs
             for label, key, ftype in params:
-                row = tk.Frame(scrollable_frame, bg="#101010")
-                row.pack(fill="x", padx=6, pady=4)
+                row = ctk.CTkFrame(scrollable_frame, fg_color="#1a1a1a")
+                row.pack(fill="x", padx=5, pady=6)
 
-                lbl = tk.Label(row, text=label + ":", bg="#101010", fg="#e0e0e0",
-                              width=15, anchor="w", font=("Segoe UI", 10))
-                lbl.pack(side="left")
+                lbl = ctk.CTkLabel(row, text=label + ":", text_color="#e0e0e0",
+                                  font=("Segoe UI", 11), width=150, anchor="w")
+                lbl.pack(side="left", padx=5)
 
                 if ftype == "text":
-                    entry = tk.Entry(row, bg="#000030", fg="#e0e0e0",
-                                    font=("Consolas", 10), width=30)
-                    entry.pack(side="left", fill="x", expand=True, padx=6)
+                    entry = ctk.CTkEntry(row, fg_color="#2a2a2a", border_color="#404040",
+                                        text_color="#e0e0e0", placeholder_text="",
+                                        font=("Consolas", 11), width=250)
+                    entry.pack(side="left", fill="x", expand=True, padx=5)
                     fields[key] = ("entry", entry)
                 elif ftype == "checkbox":
                     var = tk.BooleanVar(value=False)
-                    # Utiliser un Button plutôt qu'un Checkbutton pour plus de fiabilité
-                    btn = tk.Button(row, text="OFF",
-                                   bg="#404040", fg="#ffffff",
-                                   activebackground="#00ff00",
-                                   relief="raised", borderwidth=2,
-                                   padx=8, pady=2, highlightthickness=0,
-                                   font=("Segoe UI", 9, "bold"),
-                                   width=6)
+                    # Utiliser un CTkButton toggle
+                    btn = ctk.CTkButton(row, text="OFF", width=70,
+                                       fg_color="#404040", text_color="#ffffff",
+                                       hover_color="#00ff00", font=("Segoe UI", 10, "bold"))
 
                     def make_toggle(v=var, b=btn):
                         def toggle():
                             v.set(not v.get())
-                            b.config(bg="#00ff00" if v.get() else "#404040",
-                                    text="ON " if v.get() else "OFF")
+                            b.configure(text="ON " if v.get() else "OFF",
+                                       fg_color="#00ff00" if v.get() else "#404040",
+                                       text_color="#000000" if v.get() else "#ffffff")
                         return toggle
 
-                    btn.config(command=make_toggle())
-                    btn.pack(side="left", padx=6)
+                    btn.configure(command=make_toggle())
+                    btn.pack(side="left", padx=5)
                     fields[key] = ("checkbox", (var, btn))
 
         # Boutons d'action en bas
-        action_frame = tk.Frame(win, bg="#101010")
-        action_frame.pack(fill="x", padx=6, pady=6)
+        action_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        action_frame.pack(fill="x", padx=10, pady=10)
 
         def reload_values():
             """Recharger les valeurs actuelles de la M4."""
@@ -448,11 +439,11 @@ class Viewer:
                         widget.insert(0, str(val))
                     elif ftype == "checkbox":
                         var, btn = widget
-                        # Accepter "1", "true", "on" comme True; sinon False
                         is_checked = str(val).lower() in ("1", "true", "yes", "on")
                         var.set(is_checked)
-                        btn.config(bg="#00ff00" if is_checked else "#404040",
-                                  text="ON " if is_checked else "OFF")
+                        btn.configure(text="ON " if is_checked else "OFF",
+                                     fg_color="#00ff00" if is_checked else "#404040",
+                                     text_color="#000000" if is_checked else "#ffffff")
             self.set_status("Parametres charges")
 
         def apply_changes():
@@ -467,12 +458,15 @@ class Viewer:
             self._m4_async("Application des parametres",
                           lambda: self._submit_m4_settings(data))
 
-        tk.Button(action_frame, text="Actualiser", command=reload_values,
-                 bg="#1060c0", fg="#ffff00").pack(side="left", padx=4)
-        tk.Button(action_frame, text="Appliquer", command=apply_changes,
-                 bg="#1060c0", fg="#ffff00").pack(side="left", padx=4)
-        tk.Button(action_frame, text="Fermer", command=win.destroy,
-                 bg="#404040", fg="#c0c0c0").pack(side="right", padx=4)
+        ctk.CTkButton(action_frame, text="Actualiser", command=reload_values,
+                     fg_color="#1060c0", text_color="#ffff00", hover_color="#1a90ff",
+                     font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
+        ctk.CTkButton(action_frame, text="Appliquer", command=apply_changes,
+                     fg_color="#1060c0", text_color="#ffff00", hover_color="#1a90ff",
+                     font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
+        ctk.CTkButton(action_frame, text="Fermer", command=win.destroy,
+                     fg_color="#404040", text_color="#c0c0c0", hover_color="#606060",
+                     font=("Segoe UI", 11, "bold")).pack(side="right", padx=5)
 
         # Charger les donnees
         reload_values()
@@ -504,21 +498,21 @@ class Viewer:
         self.m4._get("config.cgi", **data)
         return "OK"
 
-    # --- navigateur de fichiers graphique de la SD --------------------
+    # --- navigateur de fichiers graphique de la SD (version modernisée) -----
     def m4_browse(self):
-        win = tk.Toplevel(self.root)
-        win.title("SD du CPC")
-        win.geometry("480x540")
-        win.configure(bg="#101010")
+        win = ctk.CTkToplevel(self.root)
+        win.title("SD du CPC — M4 Board")
+        win.geometry("600x600")
+        win.configure(fg_color="#1a1a1a")
         path = ["/"]                        # chemin courant (mutable -> closures)
         rows = []                           # (nom, est_dossier, taille) affiches
 
-        lbl = tk.Label(win, anchor="w", bg="#101010", fg="#ffd000",
-                       font=("Segoe UI", 10, "bold"), padx=6, pady=3)
-        lbl.pack(fill="x")
+        lbl = ctk.CTkLabel(win, text="SD : /", anchor="w", text_color="#ffd000",
+                          font=("Segoe UI", 12, "bold"))
+        lbl.pack(fill="x", padx=10, pady=8)
 
-        frame = tk.Frame(win, bg="#101010")
-        frame.pack(fill="both", expand=True, padx=6)
+        frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         sb = tk.Scrollbar(frame)
         sb.pack(side="right", fill="y")
         lst = tk.Listbox(frame, activestyle="none", font=("Consolas", 11),
@@ -624,13 +618,16 @@ class Viewer:
                                lambda: self.m4.mkdir(join(path[0], name)),
                                lambda r: refresh())
 
-        bar = tk.Frame(win, bg="#101010")
-        bar.pack(fill="x", padx=6, pady=6)
-        for text, cmd in (("Entrer", enter), ("Envoyer ici", do_upload),
-                          ("Telecharger", do_download), ("Lancer", do_run),
-                          ("Supprimer", do_delete), ("Nouv. dossier", do_mkdir),
-                          ("Actualiser", refresh)):
-            tk.Button(bar, text=text, command=cmd).pack(side="left", padx=2)
+        bar = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        bar.pack(fill="x", padx=10, pady=10)
+        buttons = [("Entrer", enter), ("Envoyer ici", do_upload),
+                   ("Telecharger", do_download), ("Lancer", do_run),
+                   ("Supprimer", do_delete), ("Nouv. dossier", do_mkdir),
+                   ("Actualiser", refresh)]
+        for text, cmd in buttons:
+            ctk.CTkButton(bar, text=text, command=cmd, font=("Segoe UI", 10),
+                         fg_color="#1060c0", text_color="#ffff00",
+                         hover_color="#1a90ff").pack(side="left", padx=3)
         refresh()
 
     def do_dump(self):
