@@ -1444,20 +1444,26 @@ class Viewer:
                 return
 
             search_text = search_entry.get().lower()
+
+            # Toujours afficher le ".." en premier (navigation)
             if path[0] != "/":
                 lst.insert("end", "[..]")
                 rows.append(("..", True, ""))
 
-            # Filtrer par recherche
+            # Afficher les fichiers/dossiers (filtrés si recherche active)
             for name, is_dir, size in parsed:
+                # Appliquer le filtre de recherche
                 if search_text and search_text not in name.lower():
-                    continue  # Skip si recherche et ne match pas
+                    continue  # Skip si recherche est active et ne match pas
+
+                # Ajouter à la liste
                 if is_dir:
                     lst.insert("end", "[ %s ]" % name)
                 else:
                     lst.insert("end", "   %-22s %6s" % (name[:22], size))
                 rows.append((name, is_dir, size))
 
+            # Comptage pour le status
             displayed = len(rows) - (1 if path[0] != "/" else 0)
             total = len(parsed)
             if search_text:
@@ -1478,6 +1484,7 @@ class Viewer:
                 path[0] = "/" + up if up else "/"
             else:
                 path[0] = join(path[0], e[0])
+            search_entry.delete(0, "end")  # Réinitialiser la recherche
             refresh()
         lst.bind("<Double-Button-1>", enter)
         lst.bind("<Return>", enter)
