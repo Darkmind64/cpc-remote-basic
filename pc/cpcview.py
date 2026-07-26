@@ -119,9 +119,13 @@ class DialogHelper:
                 # CRUCIAL: Définir la géométrie AVEC les coordonnées absolues
                 # Cela force la dialogue à s'afficher sur le bon écran
                 dialog.geometry(f"{width}x{height}+{dialog_x}+{dialog_y}")
+
+                # Capturer le focus pour garder la dialogue au-dessus
+                dialog.grab_set()
             except Exception:
                 # Fallback si quelque chose échoue
                 dialog.geometry(f"{width}x{height}")
+                dialog.grab_set()
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
@@ -456,9 +460,13 @@ def position_window_on_parent_screen(window, parent, width, height):
 
         # CRUCIAL: Coordonnées absolues force le positionnement sur le bon écran
         window.geometry(f"{width}x{height}+{window_x}+{window_y}")
+
+        # Garder la fenêtre au-dessus du parent
+        window.grab_set()
     except Exception:
         # Fallback
         window.geometry(f"{width}x{height}")
+        window.grab_set()
 
 
 class Viewer:
