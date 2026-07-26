@@ -418,6 +418,10 @@ class Viewer:
         self.host = link.sock.getpeername()[0]
         self.m4 = M4(self.host)     # meme carte, API HTTP (port 80)
 
+        # Cache des ROMs (30 secondes)
+        self.rom_cache = None
+        self.rom_cache_time = 0
+
         # Charger la config
         self.config = ConfigManager.load()
         ConfigManager.update_host(self.host)
@@ -766,8 +770,16 @@ class Viewer:
 
     def _fetch_m4_roms(self):
         """Récupérer l'état complet des ROMs en parsant roms.shtml.
-        Retourne : (config_dict, roms_dict) où roms_dict[slot] = name"""
+        Retourne : (config_dict, roms_dict) où roms_dict[slot] = name
+        Utilise un cache de 30 secondes pour éviter trop de requêtes."""
         import re
+        import time
+
+        # Vérifier le cache (30 secondes)
+        current_time = time.time()
+        if self.rom_cache and (current_time - self.rom_cache_time) < 30:
+            return self.rom_cache
+
         html = self.m4._get("roms.shtml").decode("latin-1", "replace")
 
         # Parser les paramètres de configuration exactement comme le HTML
@@ -831,7 +843,11 @@ class Viewer:
             except (ValueError, AttributeError):
                 pass
 
-        return config, roms
+        result = (config, roms)
+        # Mettre en cache
+        self.rom_cache = result
+        self.rom_cache_time = current_time
+        return result
 
     def m4_rom_manager(self):
         """Gestionnaire graphique des ROMs — interface inspirée du web (roms.shtml)."""
@@ -1400,6 +1416,14 @@ class Viewer:
                           font=("Segoe UI", 12, "bold"))
         lbl.pack(fill="x", padx=10, pady=8)
 
+        # Barre de recherche
+        search_frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
+        search_frame.pack(fill="x", padx=10, pady=(0, 5))
+        ctk.CTkLabel(search_frame, text="🔍", text_color="#ffff00").pack(side="left", padx=5)
+        search_entry = ctk.CTkEntry(search_frame, fg_color="#000030", border_color="#404040",
+                                   text_color="#e0e0e0", font=("Segoe UI", 10), placeholder_text="Rechercher...")
+        search_entry.pack(side="left", fill="x", expand=True, padx=5)
+
         frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
         frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         lst = CTkListbox(frame)
@@ -1418,16 +1442,28 @@ class Viewer:
             except Exception as e:
                 DialogHelper.showerror("SD", str(e), parent=win)
                 return
+
+            search_text = search_entry.get().lower()
             if path[0] != "/":
                 lst.insert("end", "[..]")
                 rows.append(("..", True, ""))
+
+            # Filtrer par recherche
             for name, is_dir, size in parsed:
+                if search_text and search_text not in name.lower():
+                    continue  # Skip si recherche et ne match pas
                 if is_dir:
                     lst.insert("end", "[ %s ]" % name)
                 else:
                     lst.insert("end", "   %-22s %6s" % (name[:22], size))
                 rows.append((name, is_dir, size))
-            self.set_status("SD : %s (%d entrees)" % (path[0], len(parsed)))
+
+            displayed = len(rows) - (1 if path[0] != "/" else 0)
+            total = len(parsed)
+            if search_text:
+                self.set_status("SD : %s (%d/%d affiches)" % (path[0], displayed, total))
+            else:
+                self.set_status("SD : %s (%d entrees)" % (path[0], total))
 
         def sel():
             s = lst.curselection()
@@ -1445,6 +1481,9 @@ class Viewer:
             refresh()
         lst.bind("<Double-Button-1>", enter)
         lst.bind("<Return>", enter)
+
+        # Binder la recherche pour filtrer en temps réel
+        search_entry.bind("<KeyRelease>", lambda e: refresh())
 
         def do_upload():
             local = filedialog.askopenfilename(parent=win,
