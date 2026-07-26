@@ -856,7 +856,7 @@ class Viewer:
         """Gestionnaire graphique des ROMs — interface propre et organisée."""
         win = ctk.CTkToplevel(self.root)
         win.title("Gestionnaire ROMs — M4 Board")
-        win.geometry("900x750")
+        win.geometry("900x900")
         win.configure(fg_color="#1a1a1a")
 
         config = {}
