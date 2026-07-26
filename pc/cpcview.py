@@ -96,7 +96,6 @@ class DialogHelper:
     @staticmethod
     def _setup_dialog(dialog, parent, width=400, height=150):
         """Configure une fenêtre dialogue pour qu'elle soit modale et centrée."""
-        dialog.geometry(f"{width}x{height}")
         dialog.configure(fg_color="#1a1a1a")
         dialog.resizable(False, False)
 
@@ -105,19 +104,29 @@ class DialogHelper:
             dialog.transient(parent)
             dialog.grab_set()
 
-            # Centrer la fenêtre sur le parent
+            # Centrer la fenêtre sur le parent (multi-écran compatible)
             try:
-                parent.update_idletasks()
-                px = parent.winfo_x()
-                py = parent.winfo_y()
+                # Forcer la mise à jour de la fenêtre parent
+                parent.update()
+                dialog.update()
+
+                # Obtenir les coordonnées du parent
+                px = parent.winfo_rootx()
+                py = parent.winfo_rooty()
                 pw = parent.winfo_width()
                 ph = parent.winfo_height()
 
+                # Calculer la position centrée
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
+
+                # Appliquer la géométrie avec position absolue
                 dialog.geometry(f"{width}x{height}+{x}+{y}")
-            except:
-                pass  # Ignorer les erreurs de positionnement
+            except Exception as e:
+                # Fallback : géométrie simple sans positionnement
+                dialog.geometry(f"{width}x{height}")
+        else:
+            dialog.geometry(f"{width}x{height}")
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
