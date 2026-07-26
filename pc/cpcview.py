@@ -432,7 +432,7 @@ class Viewer:
         self._closed = False
         self.tiles = {}             # cache (code, encre, papier) -> Image
         self.photo = None
-        self.host = link.sock.getpeername()[0]
+        self.host = link.sock.getpeername()[0] if link.sock else "localhost"
         self.m4 = M4(self.host)     # meme carte, API HTTP (port 80)
 
         # Cache des ROMs (30 secondes)
@@ -442,6 +442,9 @@ class Viewer:
         # Charger la config
         self.config = ConfigManager.load()
         ConfigManager.update_host(self.host)
+
+        # Inicialiser ROM presets depuis la config
+        self.rom_presets = self.config.get("rom_presets", {})
 
         # Appliquer thème sauvegardé
         self.theme = self.config.get("theme", "dark")
@@ -1760,6 +1763,10 @@ Toolbar :
     def reader(self):
         try:
             while True:
+                if not self.link.sock:  # Mode démo : pas de socket
+                    import time
+                    time.sleep(0.1)
+                    continue
                 data = self.link.sock.recv(4096)
                 if not data:
                     break
