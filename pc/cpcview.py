@@ -55,9 +55,9 @@ class ConfigManager:
         """Charger la config depuis le fichier."""
         defaults = {
             "last_host": "192.168.1.139",
-            "zoom": 2,
+            "zoom": 4,
             "theme": "dark",
-            "window_geometry": "320x240",
+            "window_geometry": "640x480",
             "recent_hosts": ["192.168.1.139"],
         }
         if not os.path.exists(CONFIG_FILE):
@@ -432,8 +432,16 @@ class Viewer:
 
         # Sauvegarder la géométrie/zoom à la fermeture
         def on_closing():
-            self.config["zoom"] = zoom
-            self.config["window_geometry"] = root.geometry()
+            # Calculer le zoom RÉEL en fonction de la géométrie finale
+            geom = root.geometry()  # Format: "WIDTHxHEIGHT+X+Y"
+            try:
+                width = int(geom.split('x')[0])
+                actual_zoom = max(4, width // 160)  # Min zoom = 4 (640x480)
+                self.config["zoom"] = actual_zoom
+            except (ValueError, IndexError):
+                self.config["zoom"] = zoom  # Fallback si erreur parsing
+
+            self.config["window_geometry"] = geom
             self.config["theme"] = self.theme
             ConfigManager.save(self.config)
             root.destroy()
@@ -555,7 +563,7 @@ class Viewer:
         m.add_command(label="Quitter", command=self.root.destroy)
         bar.add_cascade(label="Ecran", menu=m)
         t = tk.Menu(bar, tearoff=0)
-        for z in (2, 3, 4, 5, 6):
+        for z in (4, 5, 6, 7, 8):
             t.add_command(label="x%d  (%dx%d)" % (z, 160 * z, 120 * z),
                           command=lambda z=z: self.set_size(z))
         bar.add_cascade(label="Taille", menu=t)
@@ -1717,10 +1725,11 @@ def main():
     config = ConfigManager.load()
 
     # Déterminer le zoom : argument CLI > config > défaut
+    # Minimum zoom = 4 (640x480)
     if args.zoom is not None:
-        zoom = args.zoom
+        zoom = max(4, args.zoom)
     else:
-        zoom = config.get("zoom", 4)
+        zoom = max(4, config.get("zoom", 4))
 
     font = None if args.refont else load_font()
     if font is None:
