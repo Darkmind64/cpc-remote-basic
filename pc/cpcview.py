@@ -178,6 +178,105 @@ def parse_dir(text):
     return out
 
 
+class CTkListbox(ctk.CTkFrame):
+    """Listbox personnalisée avec customtkinter — remplace tk.Listbox."""
+
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, fg_color="#2a2a2a", **kwargs)
+        self.items = []
+        self.selection = []
+        self._double_click_callback = None
+        self._return_callback = None
+
+        # Scrollable frame avec items
+        self.canvas = tk.Canvas(self, bg="#000030", highlightthickness=0)
+        self.canvas.pack(side="left", fill="both", expand=True)
+
+        self.scrollbar = tk.Scrollbar(self, command=self.canvas.yview)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.scrollable_frame = ctk.CTkFrame(self.canvas, fg_color="#000030")
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        self.item_widgets = []
+
+    def insert(self, index, text):
+        """Ajouter un item à la liste."""
+        self.items.insert(index if index != "end" else len(self.items), text)
+        self._refresh_display()
+
+    def delete(self, start, end=None):
+        """Supprimer des items."""
+        if end is None:
+            end = start
+        if isinstance(start, int) and isinstance(end, int):
+            del self.items[start:end+1]
+        self._refresh_display()
+
+    def curselection(self):
+        """Retourner la sélection actuelle."""
+        return self.selection
+
+    def bind(self, sequence, callback):
+        """Binder les événements."""
+        if sequence == "<Double-Button-1>":
+            self._double_click_callback = callback
+        elif sequence == "<Return>":
+            self._return_callback = callback
+
+    def _refresh_display(self):
+        """Rafraîchir l'affichage de la liste."""
+        for widget in self.item_widgets:
+            widget.destroy()
+        self.item_widgets = []
+        self.selection = []
+
+        for idx, text in enumerate(self.items):
+            item_frame = ctk.CTkFrame(self.scrollable_frame, fg_color="#000030",
+                                      hover_color="#1060c0")
+            item_frame.pack(fill="x", padx=0, pady=0)
+
+            label = ctk.CTkLabel(item_frame, text=text, text_color="#e0e0e0",
+                                font=("Consolas", 11), anchor="w", justify="left")
+            label.pack(fill="x", padx=5, pady=3)
+
+            def make_click_handler(i):
+                def on_click(e):
+                    self.selection = [i]
+                    self._refresh_highlight()
+                return on_click
+
+            def make_dbl_click_handler(i):
+                def on_dbl_click(e):
+                    self.selection = [i]
+                    if self._double_click_callback:
+                        self._double_click_callback(None)
+                return on_dbl_click
+
+            label.bind("<Button-1>", make_click_handler(idx))
+            label.bind("<Double-Button-1>", make_dbl_click_handler(idx))
+            item_frame.bind("<Button-1>", make_click_handler(idx))
+            item_frame.bind("<Double-Button-1>", make_dbl_click_handler(idx))
+
+            self.item_widgets.append(item_frame)
+
+        self._refresh_highlight()
+
+    def _refresh_highlight(self):
+        """Rafraîchir la surbrillance."""
+        for idx, widget in enumerate(self.item_widgets):
+            if idx in self.selection:
+                widget.configure(fg_color="#1060c0")
+            else:
+                widget.configure(fg_color="#000030")
+
+
 class Viewer:
     def __init__(self, root, link, font, zoom, want_dump):
         self.root, self.link, self.font = root, link, font
@@ -644,13 +743,8 @@ class Viewer:
 
         frame = ctk.CTkFrame(win, fg_color="#2a2a2a")
         frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        sb = tk.Scrollbar(frame)
-        sb.pack(side="right", fill="y")
-        lst = tk.Listbox(frame, activestyle="none", font=("Consolas", 11),
-                         bg="#000030", fg="#e0e0e0", selectbackground="#1060c0",
-                         highlightthickness=0, yscrollcommand=sb.set)
-        lst.pack(side="left", fill="both", expand=True)
-        sb.config(command=lst.yview)
+        lst = CTkListbox(frame)
+        lst.pack(fill="both", expand=True)
 
         def join(base, name):
             p = base.rstrip("/") + "/" + name
