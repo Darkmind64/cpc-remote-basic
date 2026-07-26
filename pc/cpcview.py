@@ -95,13 +95,33 @@ class DialogHelper:
 
     @staticmethod
     def _setup_dialog(dialog, parent, width=400, height=150):
-        """Configure une fenêtre dialogue - juste la taille, laisser Tkinter positionner."""
+        """Configure une fenêtre dialogue - force positionnement sur le même écran que parent."""
         dialog.configure(fg_color="#1a1a1a")
         dialog.resizable(False, False)
 
-        # Définir SEULEMENT la taille - ne JAMAIS repositionner
-        # Tkinter positionne les fenêtres correctement en multi-écran d'habitude
-        dialog.geometry(f"{width}x{height}")
+        # CRITICAL: Positionner IMMÉDIATEMENT sur le même écran que le parent
+        # Sinon CTkToplevel place la dialogue sur l'écran principal de Windows
+        if parent:
+            try:
+                # S'assurer que le parent a les bonnes coordonnées
+                parent.update_idletasks()
+
+                # Récupérer les coordonnées absolues du parent
+                parent_x = parent.winfo_rootx()
+                parent_y = parent.winfo_rooty()
+                parent_w = parent.winfo_width()
+                parent_h = parent.winfo_height()
+
+                # Positionner la dialogue au centre du parent (même écran)
+                dialog_x = parent_x + (parent_w - width) // 2
+                dialog_y = parent_y + (parent_h - height) // 2
+
+                # CRUCIAL: Définir la géométrie AVEC les coordonnées absolues
+                # Cela force la dialogue à s'afficher sur le bon écran
+                dialog.geometry(f"{width}x{height}+{dialog_x}+{dialog_y}")
+            except Exception:
+                # Fallback si quelque chose échoue
+                dialog.geometry(f"{width}x{height}")
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
