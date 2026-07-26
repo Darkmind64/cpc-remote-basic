@@ -389,7 +389,7 @@ class Viewer:
         # Bouton fermer en bas
         btn_frame = ctk.CTkFrame(win, fg_color=colors["bg"])
         btn_frame.pack(fill="x", padx=10, pady=10)
-        ctk.CTkButton(btn_frame, text="Fermer", command=win.destroy,
+        ctk.CTkButton(btn_frame, text="✕ Fermer", command=win.destroy,
                      fg_color=colors["accent"], text_color="#ffffff",
                      hover_color=colors["button_hover"],
                      font=("Segoe UI", 11, "bold")).pack(side="right")
@@ -514,13 +514,13 @@ class Viewer:
             self._m4_async("Application des parametres",
                           lambda: self._submit_m4_settings(data))
 
-        ctk.CTkButton(action_frame, text="Actualiser", command=reload_values,
+        ctk.CTkButton(action_frame, text="🔄 Actualiser", command=reload_values,
                      fg_color="#1060c0", text_color="#ffff00", hover_color="#1a90ff",
                      font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
-        ctk.CTkButton(action_frame, text="Appliquer", command=apply_changes,
+        ctk.CTkButton(action_frame, text="✓ Appliquer", command=apply_changes,
                      fg_color="#1060c0", text_color="#ffff00", hover_color="#1a90ff",
                      font=("Segoe UI", 11, "bold")).pack(side="left", padx=5)
-        ctk.CTkButton(action_frame, text="Fermer", command=win.destroy,
+        ctk.CTkButton(action_frame, text="✕ Fermer", command=win.destroy,
                      fg_color="#404040", text_color="#c0c0c0", hover_color="#606060",
                      font=("Segoe UI", 11, "bold")).pack(side="right", padx=5)
 
@@ -676,10 +676,10 @@ class Viewer:
 
         bar = ctk.CTkFrame(win, fg_color="#2a2a2a")
         bar.pack(fill="x", padx=10, pady=10)
-        buttons = [("Entrer", enter), ("Envoyer ici", do_upload),
-                   ("Telecharger", do_download), ("Lancer", do_run),
-                   ("Supprimer", do_delete), ("Nouv. dossier", do_mkdir),
-                   ("Actualiser", refresh)]
+        buttons = [("📁 Entrer", enter), ("📤 Envoyer", do_upload),
+                   ("📥 Telecharger", do_download), ("▶️ Lancer", do_run),
+                   ("🗑️ Supprimer", do_delete), ("📂 Nouv. dossier", do_mkdir),
+                   ("🔄 Actualiser", refresh)]
         for text, cmd in buttons:
             ctk.CTkButton(bar, text=text, command=cmd, font=("Segoe UI", 10),
                          fg_color="#1060c0", text_color="#ffff00",
