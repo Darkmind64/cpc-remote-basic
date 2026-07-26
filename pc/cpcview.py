@@ -903,7 +903,7 @@ class Viewer:
 
         # === 2. CONFIGURATION M4 ===
         config_lbl = ctk.CTkLabel(scroll_frame, text="⚙️ Configuration M4",
-                                 text_color="#ffff00", font=("Segoe UI", 11, "bold"))
+                                 text_color="#ffff00", font=("Segoe UI", 13, "bold"))
         config_lbl.pack(pady=(15, 8), padx=15, anchor="w")
 
         config_frame = ctk.CTkFrame(scroll_frame, fg_color="#2a2a2a", corner_radius=6)
@@ -923,8 +923,8 @@ class Viewer:
 
         for row, (label_text, key) in enumerate(params):
             lbl = ctk.CTkLabel(config_frame, text=label_text, text_color="#ffffff",
-                              font=("Segoe UI", 10), anchor="w")
-            lbl.grid(row=row, column=0, sticky="w", padx=10, pady=5)
+                              font=("Segoe UI", 12), anchor="w")
+            lbl.grid(row=row, column=0, sticky="w", padx=10, pady=8)
 
             if "Enabled" in label_text or "only" in label_text:
                 var = tk.BooleanVar()
@@ -934,8 +934,8 @@ class Viewer:
                 config_widgets[key] = (chk, var, "bool")
             else:
                 entry = ctk.CTkEntry(config_frame, fg_color="#000030", border_color="#404040",
-                                    text_color="#ffff00", font=("Consolas", 10), width=150)
-                entry.grid(row=row, column=1, sticky="w", padx=10, pady=5)
+                                    text_color="#ffff00", font=("Consolas", 11), width=150, height=32)
+                entry.grid(row=row, column=1, sticky="w", padx=10, pady=8)
                 config_widgets[key] = (entry, entry, "text")
 
             def make_set_handler(k, widget_info):
@@ -965,9 +965,9 @@ class Viewer:
 
             btn = ctk.CTkButton(config_frame, text="Set",
                                command=make_set_handler(key, config_widgets[key]),
-                               width=60, font=("Segoe UI", 9), fg_color="#1060c0",
+                               width=70, height=32, font=("Segoe UI", 11, "bold"), fg_color="#1060c0",
                                hover_color="#1a90ff")
-            btn.grid(row=row, column=2, padx=10, pady=5)
+            btn.grid(row=row, column=2, padx=10, pady=8)
 
         # === 3. ROM BOARD ===
         board_lbl = ctk.CTkLabel(scroll_frame, text="📋 Rom board (32 slots)",
@@ -997,20 +997,20 @@ class Viewer:
                 rom_name = roms.get(slot, "")
 
                 slot_frame = ctk.CTkFrame(board_grid, fg_color="#0d2a0d" if rom_name else "#1a1a1a",
-                                         corner_radius=3, border_width=1, height=60,
+                                         corner_radius=3, border_width=1, height=80,
                                          border_color="#00aa00" if rom_name else "#333333")
                 slot_frame.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
 
                 slot_lbl = ctk.CTkLabel(slot_frame, text=f"{slot:02d}",
-                                       text_color="#ffaa00", font=("Segoe UI", 8, "bold"))
-                slot_lbl.pack(pady=(2, 0), padx=1)
+                                       text_color="#ffaa00", font=("Segoe UI", 11, "bold"))
+                slot_lbl.pack(pady=(3, 0), padx=1)
 
                 name_text = rom_name[:8] if rom_name else "---"
                 name_lbl = ctk.CTkLabel(slot_frame, text=name_text,
                                        text_color="#ffff00" if rom_name else "#666666",
-                                       font=("Consolas", 7), wraplength=60,
+                                       font=("Consolas", 10), wraplength=70,
                                        justify="center")
-                name_lbl.pack(pady=(0, 2), padx=1, fill="x")
+                name_lbl.pack(pady=(0, 3), padx=1, fill="x")
 
                 btn_frame = ctk.CTkFrame(slot_frame, fg_color="#1a1a1a")
                 btn_frame.pack(fill="x", padx=1, pady=(1, 2))
@@ -1039,15 +1039,15 @@ class Viewer:
                                           lambda r: refresh_all())
                     return h
 
-                ctk.CTkButton(btn_frame, text="📥", width=20, height=16,
+                ctk.CTkButton(btn_frame, text="📥", width=28, height=24,
                              command=make_upload_handler(slot),
-                             font=("Segoe UI", 7),
-                             fg_color="#0060aa", hover_color="#1a90ff", corner_radius=2).pack(side="left", padx=0)
+                             font=("Segoe UI", 10),
+                             fg_color="#0060aa", hover_color="#1a90ff", corner_radius=3).pack(side="left", padx=1)
 
-                ctk.CTkButton(btn_frame, text="🗑️", width=20, height=16,
+                ctk.CTkButton(btn_frame, text="🗑️", width=28, height=24,
                              command=make_remove_handler(slot),
-                             font=("Segoe UI", 7),
-                             fg_color="#aa0000", hover_color="#cc0000", corner_radius=2).pack(side="left", padx=0)
+                             font=("Segoe UI", 10),
+                             fg_color="#aa0000", hover_color="#cc0000", corner_radius=3).pack(side="left", padx=1)
 
                 rom_display_grid.append(slot_frame)
 
