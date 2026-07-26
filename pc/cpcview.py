@@ -833,7 +833,7 @@ class Viewer:
                                          corner_radius=3)
                 slot_frame.pack(fill="x", pady=2)
 
-                rom_name, is_loaded = roms.get(slot, ("", False))
+                rom_name = roms.get(slot, "")
 
                 # Slot label + name
                 info_text = f"Rom slot {slot:2d}"
