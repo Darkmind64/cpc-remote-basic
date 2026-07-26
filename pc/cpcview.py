@@ -99,34 +99,36 @@ class DialogHelper:
         dialog.configure(fg_color="#1a1a1a")
         dialog.resizable(False, False)
 
-        # Rendre la fenêtre modale (toujours au-dessus du parent)
         if parent:
-            dialog.transient(parent)
-            dialog.grab_set()
-
-            # Centrer la fenêtre sur le parent (multi-écran compatible)
             try:
-                # Forcer la mise à jour de la fenêtre parent
                 parent.update()
-                dialog.update()
 
-                # Obtenir les coordonnées du parent
+                # Obtenir les coordonnées du parent (écran absolu)
                 px = parent.winfo_rootx()
                 py = parent.winfo_rooty()
                 pw = parent.winfo_width()
                 ph = parent.winfo_height()
 
-                # Calculer la position centrée
+                # Calculer la position centrée sur le parent
                 x = px + (pw - width) // 2
                 y = py + (ph - height) // 2
 
-                # Appliquer la géométrie avec position absolue
+                # Définir la géométrie avec position absolue
                 dialog.geometry(f"{width}x{height}+{x}+{y}")
-            except Exception as e:
-                # Fallback : géométrie simple sans positionnement
+
+                # Rendre la fenêtre toujours au-dessus (sans transient qui cause problèmes multi-écran)
+                dialog.wm_attributes('-topmost', True)
+                dialog.grab_set()
+
+                # Redescendre après grab pour ne pas bloquer l'utilisateur
+                dialog.after(10, lambda: dialog.wm_attributes('-topmost', False))
+            except Exception:
+                # Fallback simple
                 dialog.geometry(f"{width}x{height}")
+                dialog.grab_set()
         else:
             dialog.geometry(f"{width}x{height}")
+            dialog.grab_set()
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
