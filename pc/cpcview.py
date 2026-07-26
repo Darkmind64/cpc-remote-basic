@@ -102,28 +102,37 @@ class DialogHelper:
         if parent:
             try:
                 parent.update()
+                dialog.update()
 
-                # Obtenir les coordonnées du parent (écran absolu)
-                px = parent.winfo_rootx()
-                py = parent.winfo_rooty()
-                pw = parent.winfo_width()
-                ph = parent.winfo_height()
+                # Méthode simple : utiliser les coordonnées du parent directement
+                # sans calcul complexe qui peut poser problème en multi-écran
+                parent_x = parent.winfo_x()
+                parent_y = parent.winfo_y()
 
-                # Calculer la position centrée sur le parent
-                x = px + (pw - width) // 2
-                y = py + (ph - height) // 2
+                # Si les coordonnées sont négatives ou très petites, utiliser rootx/rooty
+                if parent_x < 0 or parent_y < 0:
+                    parent_x = parent.winfo_rootx()
+                    parent_y = parent.winfo_rooty()
 
-                # Définir la géométrie avec position absolue
+                parent_w = parent.winfo_width()
+                parent_h = parent.winfo_height()
+
+                # Positionner la dialog aux mêmes coordonnées + décalage
+                # Cela évite les problèmes de multi-écran
+                x = parent_x + 50
+                y = parent_y + 50
+
+                # Définir la géométrie SANS le positionnement en +x+y d'abord
+                dialog.geometry(f"{width}x{height}")
+                dialog.update()
+
+                # PUIS forcer le positionnement
                 dialog.geometry(f"{width}x{height}+{x}+{y}")
 
-                # Rendre la fenêtre toujours au-dessus (sans transient qui cause problèmes multi-écran)
-                dialog.wm_attributes('-topmost', True)
+                # Faire le grab APRÈS le positionnement
                 dialog.grab_set()
-
-                # Redescendre après grab pour ne pas bloquer l'utilisateur
-                dialog.after(10, lambda: dialog.wm_attributes('-topmost', False))
             except Exception:
-                # Fallback simple
+                # Fallback : juste la taille
                 dialog.geometry(f"{width}x{height}")
                 dialog.grab_set()
         else:
