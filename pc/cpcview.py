@@ -103,10 +103,6 @@ class DialogHelper:
         # Tkinter positionne les fenêtres correctement en multi-écran d'habitude
         dialog.geometry(f"{width}x{height}")
 
-        # Le grab_set() DOIT être appelé APRÈS geometry
-        # pour ne pas interférer avec le positionnement
-        dialog.grab_set()
-
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
         """Input dialog — retourne la chaîne saisie ou None si annulé."""
@@ -879,8 +875,7 @@ class Viewer:
         win.title("Gestionnaire ROMs — M4 Board")
         win.geometry("600x900")
         win.configure(fg_color="#1a1a1a")
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
-        win.grab_set()
+        # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
         config = {}
         roms = {}
@@ -1239,8 +1234,7 @@ class Viewer:
         win.title(title)
         win.geometry("600x400")
         win.configure(fg_color="#1a1a1a")
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
-        win.grab_set()
+        # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
         path = ["/"]
         result = [None]
 
@@ -1379,8 +1373,7 @@ class Viewer:
         win.title(title)
         win.geometry("800x600")
         win.configure(fg_color=colors["bg"])
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
-        win.grab_set()
+        # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
         # Barre de titre
         header = ctk.CTkFrame(win, fg_color=colors["accent"])
@@ -1413,8 +1406,7 @@ class Viewer:
         win.title("Parametres M4")
         win.geometry("700x550")
         win.configure(fg_color="#1a1a1a")
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
-        win.grab_set()
+        # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
 
         # Definition des parametres par section (extensible)
         # Clés correspond aux noms d'attributs name= du HTML /settings.shtml
@@ -1572,8 +1564,7 @@ class Viewer:
         win.title("SD du CPC — M4 Board")
         win.geometry("600x600")
         win.configure(fg_color="#1a1a1a")
-        # Capturer le focus (sans transient qui cause problèmes multi-écran)
-        win.grab_set()
+        # Ne pas utiliser grab_set() - cause des problèmes de positionnement en multi-écran
         path = ["/"]                        # chemin courant (mutable -> closures)
         rows = []                           # (nom, est_dossier, taille) affiches
 
