@@ -1157,7 +1157,20 @@ class Viewer:
         def refresh_all():
             def load():
                 nonlocal config, roms
-                config, roms = self._fetch_m4_roms()
+                try:
+                    config, roms = self._fetch_m4_roms()
+                except Exception as e:
+                    self.set_status(f"M4 non accessible : affichage des valeurs par défaut")
+                    # Retourner des valeurs par défaut sans lever d'exception
+                    config = {
+                        'enabled': False, '_enabled_param': 'm4en', '_enabled_cgi': 'checkbox2.cgi',
+                        'rom_number': "6", '_rom_number_param': 'm4rm', '_rom_number_cgi': 'config.cgi',
+                        'romboard_start': "0", '_romboard_start_param': 'm4rb', '_romboard_start_cgi': 'config.cgi',
+                        'lower_enabled': False, '_lower_enabled_param': 'lwen', '_lower_enabled_cgi': 'checkbox3.cgi',
+                        'lower_slot': "31", '_lower_slot_param': 'lwsl', '_lower_slot_cgi': 'config.cgi',
+                        'use_16_slots': False, '_use_16_slots_param': 'rs16', '_use_16_slots_cgi': 'checkbox4.cgi',
+                    }
+                    roms = {i: "" for i in range(32)}
                 return self._get_sd_space()
 
             def update_ui(space_info):
@@ -1179,6 +1192,8 @@ class Viewer:
                         used_mb, total_mb = used_kb / 1024, total_kb / 1024
                         space_info_lbl.configure(
                             text=f"💾 SD: {used_mb:.1f}/{total_mb:.1f} MB ({percent*100:.1f}%)")
+                else:
+                    space_info_lbl.configure(text="💾 SD Card Space: --")
 
                 update_rom_display()
                 self.set_status("ROMs et espace disque chargés")
