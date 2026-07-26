@@ -99,45 +99,34 @@ class DialogHelper:
         dialog.configure(fg_color="#1a1a1a")
         dialog.resizable(False, False)
 
+        # Ne PAS définir de géométrie par défaut - laisser le système décider
+        # Pour éviter les problèmes de multi-écran
+
         if parent:
             try:
                 parent.update()
-                dialog.update()
 
-                # Méthode simple : utiliser les coordonnées du parent directement
-                # sans calcul complexe qui peut poser problème en multi-écran
+                # Juste définir la taille, pas la position
+                # Tkinter positionnera la fenêtre sur le même écran que le parent
+                dialog.geometry(f"{width}x{height}")
+
+                # Capturer le focus
+                dialog.grab_set()
+
+                # Décaler légèrement par rapport au parent
                 parent_x = parent.winfo_x()
                 parent_y = parent.winfo_y()
-
-                # Si les coordonnées sont négatives ou très petites, utiliser rootx/rooty
-                if parent_x < 0 or parent_y < 0:
-                    parent_x = parent.winfo_rootx()
-                    parent_y = parent.winfo_rooty()
-
-                parent_w = parent.winfo_width()
-                parent_h = parent.winfo_height()
-
-                # Positionner la dialog aux mêmes coordonnées + décalage
-                # Cela évite les problèmes de multi-écran
-                x = parent_x + 50
-                y = parent_y + 50
-
-                # Définir la géométrie SANS le positionnement en +x+y d'abord
-                dialog.geometry(f"{width}x{height}")
-                dialog.update()
-
-                # PUIS forcer le positionnement
-                dialog.geometry(f"{width}x{height}+{x}+{y}")
-
-                # Faire le grab APRÈS le positionnement
-                dialog.grab_set()
+                if parent_x >= 0 and parent_y >= 0:
+                    # Utiliser les coordonnées du parent
+                    offset_x = parent_x + 50
+                    offset_y = parent_y + 50
+                    dialog.wm_geometry(f"+{offset_x}+{offset_y}")
             except Exception:
-                # Fallback : juste la taille
+                # Fallback simple
                 dialog.geometry(f"{width}x{height}")
                 dialog.grab_set()
         else:
             dialog.geometry(f"{width}x{height}")
-            dialog.grab_set()
 
     @staticmethod
     def askstring(title, prompt, parent=None, initialvalue=""):
