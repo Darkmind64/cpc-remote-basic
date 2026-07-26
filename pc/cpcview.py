@@ -272,6 +272,20 @@ class Link:
             pass
 
 
+class DummyLink:
+    """Connexion factice pour mode démo (quand CPC n'est pas accessible)."""
+
+    def __init__(self):
+        self.sock = None
+        self.lock = threading.Lock()
+
+    def send(self, data):
+        pass  # Ne rien faire
+
+    def close(self):
+        pass  # Ne rien faire
+
+
 def load_font():
     """Jeu de caracteres en cache, ou None s'il faut le demander."""
     try:
@@ -1919,7 +1933,15 @@ def main():
     if font is None:
         print("Jeu de caracteres absent du cache : demande au CPC (2 Ko)...")
 
-    link = Link(args.host, args.port)
+    link = None
+    try:
+        link = Link(args.host, args.port)
+        print(f"✓ Connecté au CPC sur {args.host}:{args.port}")
+    except Exception as e:
+        print(f"⚠ Impossible de se connecter au CPC ({e})")
+        print(f"  L'interface se lancera en mode démo (ROM manager et M4 control fonctionneront)")
+        link = DummyLink()
+
     root = tk.Tk()
 
     # Créer le Viewer AVANT d'appliquer la géométrie
