@@ -99,6 +99,7 @@ MODE_MARK = 0x4D            # ESC 'M' <chiffre>          -> MODE
 COL_MARK = 0x43             # ESC 'C' <18 octets>        -> couleurs
 CLS_MARK = 0x4C             # ESC 'L'                    -> effacement
 FONT_MARK = 0x46            # ESC 'F' <2048 octets>      -> jeu de caracteres
+POS_MARK = 0x50             # ESC 'P' <colonne ligne>    -> position du curseur
 FONT_LEN = 2048             # 256 caracteres x 8 octets
 
 # Commandes hors-bande envoyees AU CPC : prefixe &01, puis une lettre.
@@ -110,7 +111,7 @@ CMD_ECHO = b"\x01E"    # renvoyer l'echo des frappes
 # controle pose directement dans le source est invisible a la relecture.
 COL_LEN = 18                # encre, papier, 16 couleurs de palette
 ESC_LEN = {MODE_MARK: 1, COL_MARK: COL_LEN, CLS_MARK: 0,
-           FONT_MARK: FONT_LEN}
+           FONT_MARK: FONT_LEN, POS_MARK: 2}
 
 # Les 27 couleurs du CPC, en RVB. Chaque composante vaut 0, 128 ou 255.
 CPC_RGB = [
@@ -278,6 +279,10 @@ class CpcScreen:
             elif a[0] == COL_MARK:
                 self.pen, self.paper = a[1] & 15, a[2] & 15
                 self.inks = [v % 27 for v in a[3:3 + 16]]
+            elif a[0] == POS_MARK:
+                # Position du curseur depuis le CPC (colonne, ligne)
+                self.col = a[1]
+                self.row = a[2]
         self.ctrl, self.args = None, []
 
     def trim_empty_lines(self):

@@ -991,7 +991,20 @@ sd_nonl:	inc	d
 		ld	a,#25
 		cp	d
 		jr	nc, sd_row
-		pop	hl			; rendre le curseur ou il etait
+
+		; --- envoyer la position du curseur au PC
+		; Format: ESC 'P' colonne ligne
+		pop	hl			; hl = position du curseur sauvegardee (H=col, L=ligne)
+		ld	a,#0x1B			; ESC
+		call	tx_put
+		ld	a,#0x50			; 'P' pour position du curseur
+		call	tx_put
+		ld	a,h			; colonne
+		call	tx_put
+		ld	a,l			; ligne
+		call	tx_put
+
+		ld	h,h			; restaurer hl (col/ligne)
 		jp	TXT_SET_CURSOR
 
 modew:		.db	20,40,80,40		; largeur selon le MODE
