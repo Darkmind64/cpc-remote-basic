@@ -1437,7 +1437,7 @@ m4_rom_name:	.ascis	"M4 BOARD"
 ; ==================================================================
 msg_inst:	.ascii	"CTERM en &8000. RSX : TERM TERMOFF TERMST"
 		.db	13,10,0
-msg_wait:	.ascii	"Attente du PC sur le port 6128 (ESC=abandon)..."
+msg_wait:	.ascii	"Attente du PC sur le port 6128..."
 		.db	13,10,0
 msg_on:		.ascii	"Terminal actif : sortie BASIC -> PC."
 		.db	13,10,0

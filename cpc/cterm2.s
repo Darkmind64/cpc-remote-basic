@@ -1404,7 +1404,7 @@ msg_inst:	.ascii	"CTERM2 en &8000. RSX : TERM TERMOFF TERMIO"
 		.db	13,10,0
 msg_again:	.ascii	"CTERM2 deja installe."
 		.db	13,10,0
-msg_wait:	.ascii	"Attente du PC sur le port 6128 (ESC=abandon)..."
+msg_wait:	.ascii	"Attente du PC sur le port 6128..."
 		.db	13,10,0
 msg_on:		.ascii	"Terminal actif."
 		.db	13,10,0
