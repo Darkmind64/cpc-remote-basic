@@ -286,10 +286,13 @@ class CpcScreen:
         Le dump du CPC envoie toutes les 25 lignes, y compris les vides à la fin.
         Cette méthode nettoie les lignes vides superflues pour un affichage propre.
 
-        Note: on ne réajuste pas row - si le curseur était après les lignes
-        supprimées, il reste à sa position correcte (après la dernière ligne).
+        IMPORTANT: ne pas supprimer les lignes près du curseur, qui peut être en
+        train de se positionner sur une ligne vide avant d'y ajouter du texte.
         """
-        while len(self.cells) > 1 and not self.cells[-1]:
+        # Ne trimmer que si le curseur n'est pas trop près de la fin
+        # (laisser de la marge pour le texte qui va être tapé)
+        trim_until = max(self.row + 2, len(self.cells) - 5)
+        while len(self.cells) > trim_until and not self.cells[-1]:
             del self.cells[-1]
 
     def feed(self, data):
