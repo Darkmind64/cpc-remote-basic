@@ -280,6 +280,18 @@ class CpcScreen:
                 self.inks = [v % 27 for v in a[3:3 + 16]]
         self.ctrl, self.args = None, []
 
+    def trim_empty_lines(self):
+        """Supprime les lignes vides à la fin de l'écran (après un dump).
+
+        Le dump du CPC envoie toutes les 25 lignes, y compris les vides à la fin.
+        Cette méthode nettoie les lignes vides superflues pour un affichage propre.
+        """
+        while len(self.cells) > 1 and not self.cells[-1]:
+            del self.cells[-1]
+        # Réajuster row si on a supprimé la ligne du curseur
+        if self.row >= len(self.cells):
+            self.row = len(self.cells) - 1
+
     def feed(self, data):
         out = []
         for b in data:

@@ -1899,6 +1899,8 @@ Toolbar :
         return img
 
     def render(self):
+        # Nettoyer les lignes vides superflues (apres un dump)
+        self.screen.trim_empty_lines()
         w = self.screen.width
         rows = self.screen.cells[-ROWS:]
         inks = self.screen.inks
