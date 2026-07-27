@@ -1912,7 +1912,7 @@ Toolbar :
         # Le curseur : sur CPC c'est un pave plein, pas un trait clignotant.
         # On l'inverse a la position courante (ligne du curseur, colonne).
         cr, cc = self.screen.row, self.screen.col
-        if 0 <= cr < ROWS and cc < w:
+        if 0 <= cr < len(rows) and cc < w:
             code, pen, paper = 32, self.screen.pen, self.screen.paper
             if cc < len(rows[cr]):
                 code, pen, paper = rows[cr][cc]
