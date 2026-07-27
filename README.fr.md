@@ -52,16 +52,25 @@ sur ton WiFi, plus [SDCC](https://sdcc.sourceforge.net/) et Python 3 sur le PC.
 
 #### Recommandé : installer en ROM (boot en une commande)
 
-Compile-le et envoie-le via `pc/m4term.py` :
+Compile-le et envoie-le sur la M4 Board :
 
 ```bash
 cd cpc && ./build_termrom2.cmd        # produit TERM2.ROM
 ```
-```
+
+**Méthode A : avec `m4term.py` (ligne de commande)**
+```bash
+python pc/m4term.py 192.168.1.139
 put ../cpc/TERM2.ROM
 rom ../cpc/TERM2.ROM 3 TERM
 resetm4
 ```
+
+**Méthode B : avec l'interface web de la M4 Board**
+1. Ouvre `http://192.168.1.139` dans ton navigateur
+2. Envoie `TERM2.ROM` via le gestionnaire de fichiers
+3. Utilise le gestionnaire de ROM pour l'installer dans le slot 3
+4. Clique sur « Reset M4 »
 
 Ensuite, tape simplement sur le CPC :
 ```basic
@@ -77,9 +86,18 @@ Si tu préfères ne pas occuper de slot ROM :
 ```bash
 cd cpc && ./build_cterm2.cmd          # produit CTERM2.BIN
 ```
-```
+
+**Méthode A : avec `m4term.py` (ligne de commande)**
+```bash
+python pc/m4term.py 192.168.1.139
 put ../cpc/CTERM2.BIN
 ```
+
+**Méthode B : avec l'interface web de la M4 Board**
+1. Ouvre `http://192.168.1.139` dans ton navigateur
+2. Envoie `CTERM2.BIN` via le gestionnaire de fichiers
+
+Puis sur le CPC :
 ```basic
 MEMORY &7FFF:LOAD"cterm2.bin":CALL &8000:|TERM
 ```
