@@ -2,6 +2,11 @@
 
 *[Version française](README.fr.md)*
 
+> **⚠️ Author's Note**  
+> I'm not a professional developer. This project was built through "vibe-coding" with the help of Claude Code, exploring what was possible rather than following a strict plan. Because of this approach, the code can likely be significantly improved by experienced programmers, and it may contain bugs. This is primarily a **proof of concept** that turned out to work well enough to be useful for the Amstrad CPC enthusiast community. I'm sharing it because it might help others with similar interests. Contributions, improvements, and bug reports are very welcome!
+
+---
+
 Type BASIC commands in a window on your PC; they run on a real **Amstrad CPC**
 and its screen output comes straight back. The CPC's own keyboard keeps working
 at the same time, and **your BASIC program space stays completely free** — no

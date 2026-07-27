@@ -2,6 +2,11 @@
 
 *[English version](README.md)*
 
+> **⚠️ Note de l'auteur**  
+> Je ne suis pas développeur professionnel. Ce projet a été développé en « vibe-coding » avec l'aide de Claude Code, en explorant ce qui était possible plutôt que de suivre un plan strict. De ce fait, le code peut certainement être largement amélioré par des programmeurs expérimentés, et il peut contenir des bugs. C'est avant tout une **preuve de concept** qui s'est avérée suffisamment fonctionnelle pour être utile à la communauté des passionnés d'Amstrad CPC. Je la partage parce qu'elle pourrait aider d'autres personnes ayant des intérêts similaires. Les contributions, améliorations et rapports de bugs sont très bienvenues !
+
+---
+
 Tu tapes des commandes BASIC dans une fenêtre de ton PC ; elles s'exécutent sur un
 vrai **Amstrad CPC** et sa sortie écran remonte aussitôt. Le clavier du CPC
 continue de fonctionner en parallèle, et **ton espace programme BASIC reste
