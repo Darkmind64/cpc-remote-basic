@@ -142,6 +142,12 @@ python pc/cpcview.py <ip-du-cpc>
 - Support multi-écran (les dialogues apparaissent sur le bon écran)
 - `--dump` pour capturer l'écran courant du CPC à la connexion
 
+**Capture d'écran :**
+
+![cpcview fonctionnant sur Amstrad CPC 128K](screenshots/cpcview-main.png)
+
+*L'afficheur graphique montrant un Amstrad CPC 128K avec M4 Board, affichant le prompt BASIC Ready avec terminal actif*
+
 #### Outil de contrôle M4
 
 Contrôle direct via l'API HTTP de la M4 :
