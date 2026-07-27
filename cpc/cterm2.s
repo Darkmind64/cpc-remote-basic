@@ -974,7 +974,7 @@ sd_trim:	ld	a,(hl)
 sd_emit:	ld	hl,#dumpline		; --- emettre la ligne utile
 		ld	a,b
 		or	a
-		jr	z, sd_empty_line	; ligne vide : traiter separement
+		jr	z, sd_eol
 sd_ec:		ld	a,(hl)			; tx_put preserve BC/DE/HL
 		call	tx_put
 		inc	hl
@@ -993,17 +993,6 @@ sd_nonl:	inc	d
 		jr	nc, sd_row
 		pop	hl			; rendre le curseur ou il etait
 		jp	TXT_SET_CURSOR
-
-sd_empty_line:	pop	de			; d = numero de ligne vide
-		ld	a,d
-		cp	#22			; si ligne >= 22 (dernieres 4), pas de CR/LF
-		jr	nc, sd_nonl		; sinon garder espacements legitimes
-		; ligne vide < 22 : envoyer CR/LF (espacement du milieu)
-		ld	a,#13
-		call	tx_put
-		ld	a,#10
-		call	tx_put
-		jr	sd_nonl
 
 modew:		.db	20,40,80,40		; largeur selon le MODE
 
