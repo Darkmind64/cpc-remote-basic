@@ -974,7 +974,7 @@ sd_trim:	ld	a,(hl)
 sd_emit:	ld	hl,#dumpline		; --- emettre la ligne utile
 		ld	a,b
 		or	a
-		jr	z, sd_eol
+		jr	z, sd_skip_crlf		; ligne vide : pas de CR/LF
 sd_ec:		ld	a,(hl)			; tx_put preserve BC/DE/HL
 		call	tx_put
 		inc	hl
@@ -991,9 +991,11 @@ sd_nonl:	inc	d
 		ld	a,#25
 		cp	d
 		jr	nc, sd_row
-
 		pop	hl			; rendre le curseur ou il etait
 		jp	TXT_SET_CURSOR
+
+sd_skip_crlf:	pop	de			; ligne vide : pas de CR/LF, aller a sd_nonl
+		jr	sd_nonl
 
 modew:		.db	20,40,80,40		; largeur selon le MODE
 
