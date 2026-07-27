@@ -1911,12 +1911,17 @@ Toolbar :
                 frame.paste(self.tile(code, pen, paper), (c * CELL, r * CELL))
         # Le curseur : sur CPC c'est un pave plein, pas un trait clignotant.
         # On l'inverse a la position courante (ligne du curseur, colonne).
+        # IMPORTANT: convertir les coordonnées du curseur de self.cells à rows
+        # (car rows contient seulement les dernières lignes apres trimming)
         cr, cc = self.screen.row, self.screen.col
-        if 0 <= cr < len(rows) and cc < w:
+        # Indice du curseur dans rows (au lieu de self.cells)
+        row_offset = len(self.screen.cells) - len(rows)
+        display_row = cr - row_offset
+        if 0 <= display_row < len(rows) and cc < w:
             code, pen, paper = 32, self.screen.pen, self.screen.paper
-            if cc < len(rows[cr]):
-                code, pen, paper = rows[cr][cc]
-            frame.paste(self.tile(code, paper, pen), (cc * CELL, cr * CELL))
+            if cc < len(rows[display_row]):
+                code, pen, paper = rows[display_row][cc]
+            frame.paste(self.tile(code, paper, pen), (cc * CELL, display_row * CELL))
         # Adapter a la fenetre : on etire l'image dans le plus grand
         # rectangle 4:3 qui tient dans le canvas (les pixels du CPC ne sont
         # pas carres -> proportions d'ecran 4:3), puis on centre (bandes
